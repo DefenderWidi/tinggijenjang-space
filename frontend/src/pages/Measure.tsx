@@ -139,6 +139,8 @@ export default function Measure() {
     EX2500: 7.0,
   } as const
 
+  const [shiftTime, setShiftTime] = useState<"" | "START" | "MID" | "END">("")
+
   type RefKey = keyof typeof REF_MAP
 
   const [refKey, setRefKey] = useState<RefKey | "">("")
@@ -193,7 +195,10 @@ export default function Measure() {
   const [calError, setCalError] = useState(false)
   const [measureError, setMeasureError] = useState(false)
 
-  const isFormValid = inspectorName.trim() !== "" && areaId.trim() !== ""
+  const isFormValid =
+    inspectorName.trim() !== "" &&
+    areaId.trim() !== "" &&
+    shiftTime !== ""
 
   // ======= Helpers =======
   function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
@@ -666,33 +671,33 @@ export default function Measure() {
           </div>
         </div>
 
-       <div className="flex items-start justify-end">
-  <div className="relative max-w-[420px] rounded-xl border border-buma-border bg-white px-3 py-2 shadow-soft overflow-hidden">
-    
-    {/* Accent line kiri */}
-    <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-buma-green via-buma-blue to-buma-orange" />
+        <div className="flex items-start justify-end">
+          <div className="relative max-w-[420px] rounded-xl border border-buma-border bg-white px-3 py-2 shadow-soft overflow-hidden">
 
-    <div className="pl-3">
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-buma-muted">
-        Status
-      </div>
-      <div className="mt-1 text-xs font-semibold text-buma-text leading-snug">
-        {hint}
-      </div>
-    </div>
+            {/* Accent line kiri */}
+            <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-buma-green via-buma-blue to-buma-orange" />
 
-  </div>
-</div>
+            <div className="pl-3">
+              <div className="text-[10px] font-semibold uppercase tracking-widest text-buma-muted">
+                Status
+              </div>
+              <div className="mt-1 text-xs font-semibold text-buma-text leading-snug">
+                {hint}
+              </div>
+            </div>
+
+          </div>
+        </div>
 
       </div>
 
       {/* Main layout */}
       <div className="grid gap-4 lg:grid-cols-[390px_1fr]">
         {/* LEFT PANEL */}
-       <aside className="relative overflow-hidden rounded-2xl border border-buma-border bg-white shadow-soft">
-  
-  {/* TOP GRADIENT STRIP */}
-  <div className="absolute inset-x-0 top-0 h-[4px] bg-gradient-to-r from-buma-green via-buma-blue to-buma-orange" />
+        <aside className="relative overflow-hidden rounded-2xl border border-buma-border bg-white shadow-soft">
+
+          {/* TOP GRADIENT STRIP */}
+          <div className="absolute inset-x-0 top-0 h-[4px] bg-gradient-to-r from-buma-green via-buma-blue to-buma-orange" />
 
           <div className="p-4">
             <SectionTitle no="01" title="Inspection Data" />
@@ -731,6 +736,29 @@ export default function Measure() {
                     : "border-buma-border focus:border-buma-green/60"
                     } bg-white`}
                 />
+              </div>
+
+              <div className="grid gap-1">
+                <label className="text-[11px] font-semibold text-buma-muted">
+                  Shift Time <span className="text-buma-orange">*</span>
+                </label>
+
+                <select
+                  value={shiftTime}
+                  onChange={(e) => {
+                    setShiftTime(e.target.value as "START" | "MID" | "END")
+                    setFormError(false)
+                  }}
+                  className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${formError && !shiftTime
+                    ? "border-red-500"
+                    : "border-buma-border focus:border-buma-green/60"
+                    }`}
+                >
+                  <option value="">Pilih waktu inspeksi</option>
+                  <option value="START">Awal Shift</option>
+                  <option value="MID">Tengah Shift</option>
+                  <option value="END">Akhir Shift</option>
+                </select>
               </div>
 
               <input
@@ -773,7 +801,7 @@ export default function Measure() {
 
               {formError && !isFormValid && (
                 <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
-                  ⚠ Inspector Name dan Area / Front ID wajib diisi sebelum mengimpor foto.
+                  ⚠ Inspector Name, Area / Front ID, dan Shift Time wajib diisi sebelum mengimpor foto.
                 </div>
               )}
             </div>
@@ -1140,71 +1168,74 @@ export default function Measure() {
               <IconButton label="Capture" icon="📷" onClick={exportImage} />
             </div>
 
-            {/* Bottom bar */}
-            <div className="sticky bottom-0 w-full border-t border-buma-border bg-white/95 backdrop-blur">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="flex items-end gap-3">
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-buma-muted">
-                      Current Measured Value
-                    </div>
-                    <div className="text-4xl font-extrabold text-buma-text">
-                      {currentValueText}{" "}
-                      <span className="text-base font-semibold text-buma-muted">m</span>
-                    </div>
-                    <div className="mt-1 text-xs text-buma-muted">
-                      {currentDeg == null ? "—" : `Angle: ${currentDeg.toFixed(1)}°`}
-                    </div>
-                  </div>
+           {/* Bottom bar (actions only) */}
+<div className="sticky bottom-0 w-full border-t border-buma-border bg-white/95 backdrop-blur">
+  <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
+    <button
+      className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-buma-green to-buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-50"
+      type="button"
+      disabled={!pixelPerMeter || measurements.length === 0}
+      title={
+        !pixelPerMeter
+          ? "Kalibrasi dulu"
+          : measurements.length === 0
+          ? "Belum ada garis ukur"
+          : "Submit"
+      }
+      onClick={() => {
+        alert(
+          `Submit (demo)\n\nTotal measurement: ${measurements.length}\nLast: ${
+            currentMeters ? currentMeters.toFixed(2) + " m" : "—"
+          }`
+        )
+      }}
+    >
+      {/* Submit icon */}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        className="shrink-0"
+      >
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+          d="M10 14L21 3m0 0l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z"
+        />
+      </svg>
 
-                  <div className="hidden gap-2 md:flex">
-                    <StatPill label="Limit" value={`${MAX_BENCH.toFixed(2)} m`} tone="warn" />
-                    <StatPill
-                      label="Variance"
-                      value={currentMeters == null ? "—" : `${varianceText} m`}
-                      tone={status.tone === "warn" ? "warn" : "ok"}
-                    />
-                  </div>
-                </div>
+      Finalize & Submit
+    </button>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-xs">
-                    <div className="text-[10px] uppercase tracking-widest text-buma-muted">Safety</div>
-                    <div
-                      className={`font-extrabold ${status.tone === "warn" ? "text-buma-orange" : "text-buma-green"
-                        }`}
-                    >
-                      {status.label}
-                    </div>
-                  </div>
+    <button
+    className="inline-flex items-center justify-center gap-2 rounded-xl border border-buma-blue/30 bg-buma-blue/10 px-4 py-2.5 text-sm font-extrabold text-buma-blue shadow-soft transition-all duration-150 hover:bg-buma-blue/20 hover:border-buma-blue/40 active:scale-95 disabled:opacity-40"
+      type="button"
+      disabled={!imgSrc}
+      onClick={exportImage}
+      title={!imgSrc ? "Upload foto dulu" : "Save as PDF"}
+    >
+      {/* PDF icon */}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="15"
+        height="15"
+        viewBox="0 0 15 15"
+        className="shrink-0"
+      >
+        <path
+          fill="currentColor"
+          d="M2.5 6.5V6H2v.5zm4 0V6H6v.5zm0 4H6v.5h.5zm7-7h.5v-.207l-.146-.147zm-3-3l.354-.354L10.707 0H10.5zM2.5 7h1V6h-1zm.5 4V8.5H2V11zm0-2.5v-2H2v2zm.5-.5h-1v1h1zm.5-.5a.5.5 0 0 1-.5.5v1A1.5 1.5 0 0 0 5 7.5zM3.5 7a.5.5 0 0 1 .5.5h1A1.5 1.5 0 0 0 3.5 6zM6 6.5v4h1v-4zm.5 4.5h1v-1h-1zM9 9.5v-2H8v2zM7.5 6h-1v1h1zM9 7.5A1.5 1.5 0 0 0 7.5 6v1a.5.5 0 0 1 .5.5zM7.5 11A1.5 1.5 0 0 0 9 9.5H8a.5.5 0 0 1-.5.5zM10 6v5h1V6zm.5 1H13V6h-2.5zm0 2H12V8h-1.5zM2 5V1.5H1V5zm11-1.5V5h1V3.5zM2.5 1h8V0h-8zm7.646-.146l3 3l.708-.708l-3-3zM2 1.5a.5.5 0 0 1 .5-.5V0A1.5 1.5 0 0 0 1 1.5zM1 12v1.5h1V12zm1.5 3h10v-1h-10zM14 13.5V12h-1v1.5zM12.5 15a1.5 1.5 0 0 0 1.5-1.5h-1a.5.5 0 0 1-.5.5zM1 13.5A1.5 1.5 0 0 0 2.5 15v-1a.5.5 0 0 1-.5-.5z"
+        />
+      </svg>
 
-                  <button
-                    className="rounded-xl bg-gradient-to-r from-buma-green -buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-50"
-                    type="button"
-                    disabled={!pixelPerMeter || measurements.length === 0}
-                    title={!pixelPerMeter ? "Kalibrasi dulu" : measurements.length === 0 ? "Belum ada garis ukur" : "Submit"}
-                    onClick={() => {
-                      alert(
-                        `Submit (demo)\n\nTotal measurement: ${measurements.length}\nLast: ${currentMeters ? currentMeters.toFixed(2) + " m" : "—"
-                        }`
-                      )
-                    }}
-                  >
-                    Finalize & Submit
-                  </button>
-
-                  <button
-                    className="rounded-xl border border-buma-border bg-white px-4 py-2.5 text-sm font-extrabold text-buma-text hover:bg-black/5 disabled:opacity-50"
-                    type="button"
-                    disabled={!imgSrc}
-                    onClick={exportImage}
-                    title={!imgSrc ? "Upload foto dulu" : "Export PNG report"}
-                  >
-                    Export Report
-                  </button>
-                </div>
-              </div>
-            </div>
+      Save as PDF
+    </button>
+  </div>
+</div>
           </div>
         </section>
       </div>

@@ -68,45 +68,17 @@ export default function PjaDashboard() {
   const [data, setData] = useState<Array<AlertItem & { review: ReviewStatus }>>([
     {
       id: "INT-256d9549",
-      inspectedAt: "2026/02/02 23:58",
-      inspector: "Alexander Pratama",
-      shift: "NIGHT",
+      inspectedAt: "2026/02/02 12:58",
+      inspector: "Hendra Toban",
+      shift: "DAY",
       front: "Front 12-B Highwall",
       lines: [
-        { label: "A", heightM: 7.8 },
-        { label: "B", heightM: 6.9 },
-        { label: "C", heightM: 7.4 },
+        { label: "A", heightM: 7.71 },
+        { label: "B", heightM: 8.08 },
+        { label: "C", heightM: 7.15 },
       ],
-      photoUrl: "/LoginBackground.jpeg",
+      photoUrl: "/ContohPengukuran.png",
       review: "PENDING",
-    },
-    {
-      id: "INT-02102",
-      inspectedAt: "2026/02/02 23:33",
-      inspector: "Hendra Toban",
-      shift: "NIGHT",
-      front: "PIT A – North Sector",
-      lines: [
-        { label: "A", heightM: 9.1 },
-        { label: "B", heightM: 7.6 },
-      ],
-      photoUrl: "/LoginBackground.jpeg",
-      review: "PENDING",
-    },
-    {
-      id: "INT-92019",
-      inspectedAt: "2026/02/02 22:46",
-      inspector: "Rizky",
-      shift: "DAY",
-      front: "Front 03-A Highwall",
-      lines: [
-        { label: "A", heightM: 6.4 },
-        { label: "B", heightM: 6.8 },
-        { label: "C", heightM: 7.2 },
-        { label: "D", heightM: 7.7 },
-      ],
-      photoUrl: "/LoginBackground.jpeg",
-      review: "VALID",
     },
   ])
 
