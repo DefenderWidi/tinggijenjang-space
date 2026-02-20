@@ -137,6 +137,8 @@ export default function Measure() {
   const REF_MAP = {
     EX3600: 7.8,
     EX2500: 7.0,
+    EX2000: 5.97,
+    TIANG: 4,
   } as const
 
   const [shiftTime, setShiftTime] = useState<"" | "START" | "MID" | "END">("")
@@ -850,6 +852,8 @@ export default function Measure() {
                     <option value="">— Pilih unit referensi —</option>
                     <option value="EX3600">EX3600 (7.80 m)</option>
                     <option value="EX2500">EX2500 (7.00 m)</option>
+                    <option value="EX2000">EX2000 (5.97 m)</option>
+                    <option value="TIANG">Tiang (4.00 m)</option>
                   </select>
                 </div>
               </div>
