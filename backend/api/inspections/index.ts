@@ -16,6 +16,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res)
   if (req.method === "OPTIONS") return res.status(200).end()
 
+  const parseBody = () => {
+    if (req.body == null || req.body === "") return {}
+    if (typeof req.body === "object") return req.body
+    if (typeof req.body === "string") {
+      try {
+        return JSON.parse(req.body)
+      } catch {
+        return null
+      }
+    }
+    return {}
+  }
+
   if (req.method === "GET") {
     const { data, error } = await supabaseAdmin
       .from("inspections")
@@ -28,7 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body
+    const body = parseBody()
+    if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
 
     const shift: Shift | null = body?.shift === "DAY" || body?.shift === "NIGHT" ? body.shift : null
     const review_status: ReviewStatus =

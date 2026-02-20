@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import AppLayout from "../layouts/AppLayout"
 import {
   ResponsiveContainer,
@@ -17,17 +17,43 @@ import {
 type Shift = "DAY" | "NIGHT"
 type ReviewStatus = "PENDING" | "VALID" | "REJECT"
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
+
+function mapInspection(r: any): InspectionRow {
+  return {
+    id: r.id,
+    inspectedAt: r.inspected_at, // ISO string dari DB
+    inspector: r.inspector,
+    shift: r.shift,
+    pelaksanaan: r.pelaksanaan,
+    front: r.front,
+    linesCount: r.lines_count ?? 0,
+    linesOkCount: r.lines_ok_count ?? 0,
+    maxHeightM: Number(r.max_height_m ?? 0),
+    reviewedBy: r.reviewed_by ?? null,
+    reviewStatus: r.review_status ?? "PENDING",
+  }
+}
+
+async function fetchInspections(signal?: AbortSignal): Promise<InspectionRow[]> {
+  const res = await fetch(`${API_BASE}/api/inspections`, { signal })
+  if (!res.ok) throw new Error(`Failed to load inspections (${res.status})`)
+  const json = await res.json()
+  const rows = Array.isArray(json?.data) ? json.data : []
+  return rows.map(mapInspection)
+}
+
 type InspectionRow = {
   id: string
-  inspectedAt: string // "2026-02-19 08:12"
+  inspectedAt: string
   inspector: string
   shift: Shift
   pelaksanaan: string
   front: string
   linesCount: number
-  linesOkCount: number // dummy “berapa garis yang sesuai”
+  linesOkCount: number
   maxHeightM: number
-  reviewedBy: string // PJA name
+  reviewedBy: string | null
   reviewStatus: ReviewStatus
 }
 
@@ -40,8 +66,22 @@ function shiftLabel(s: Shift) {
 }
 
 function formatDateTime(dt: string) {
-  const [d, t] = dt.split(" ")
-  return { date: d, time: t ?? "-" }
+  const d = new Date(dt)
+  if (!Number.isFinite(d.getTime())) {
+    // fallback kalau format lama "YYYY-MM-DD HH:mm"
+    const [dd, tt] = String(dt).split(" ")
+    return { date: dd ?? "-", time: tt ?? "-" }
+  }
+  // tampilkan waktu lokal Indonesia (opsional). Default browser timezone.
+  const date = d.toLocaleDateString("id-ID", { year: "numeric", month: "2-digit", day: "2-digit" })
+  const time = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+  return { date, time }
+}
+
+function ymd(dt: string) {
+  const d = new Date(dt)
+  if (!Number.isFinite(d.getTime())) return String(dt).split(" ")[0] ?? ""
+  return d.toISOString().slice(0, 10) // YYYY-MM-DD
 }
 
 function inRange(dateStr: string, from?: string, to?: string) {
@@ -391,87 +431,33 @@ export default function Dashboard() {
   const [toDate, setToDate] = useState("2026-02-19")
   const [month, setMonth] = useState("2026-02")
 
-  // Dummy data (nanti ganti API)
-  const inspectionsAll: InspectionRow[] = useMemo(
-    () => [
-      {
-        id: "INT-256d9549",
-        inspectedAt: "2026-02-19 08:12",
-        inspector: "Hendra Toban",
-        shift: "DAY",
-        pelaksanaan: "Awal Shift",
-        front: "Front 12-B Highwall",
-        linesCount: 3,
-        linesOkCount: 2,
-        maxHeightM: 8.08,
-        reviewedBy: "PJA Rina",
-        reviewStatus: "PENDING",
-      },
-      {
-        id: "INT-a11c2102",
-        inspectedAt: "2026-02-19 10:40",
-        inspector: "Rizky P.",
-        shift: "DAY",
-        pelaksanaan: "Awal Shift",
-        front: "Front 10-A",
-        linesCount: 2,
-        linesOkCount: 2,
-        maxHeightM: 7.62,
-        reviewedBy: "PJA Rina",
-        reviewStatus: "VALID",
-      },
-      {
-        id: "INT-b9912e77",
-        inspectedAt: "2026-02-18 21:05",
-        inspector: "Dimas W.",
-        shift: "NIGHT",
-        pelaksanaan: "Awal Shift",
-        front: "Front 8-C",
-        linesCount: 4,
-        linesOkCount: 1,
-        maxHeightM: 8.22,
-        reviewedBy: "PJA Bagus",
-        reviewStatus: "REJECT",
-      },
-      {
-        id: "INT-c1d8f0aa",
-        inspectedAt: "2026-02-18 14:22",
-        inspector: "Sari N.",
-        shift: "DAY",
-        pelaksanaan: "Awal Shift",
-        front: "Front 12-B Highwall",
-        linesCount: 3,
-        linesOkCount: 3,
-        maxHeightM: 7.81,
-        reviewedBy: "PJA Bagus",
-        reviewStatus: "VALID",
-      },
-      {
-        id: "INT-d01a9c10",
-        inspectedAt: "2026-02-17 09:11",
-        inspector: "Hendra Toban",
-        shift: "DAY",
-        pelaksanaan: "Akhir Shift",
-        front: "Front 7-D",
-        linesCount: 2,
-        linesOkCount: 2,
-        maxHeightM: 7.55,
-        reviewedBy: "PJA Rina",
-        reviewStatus: "VALID",
-      },
-    ],
-    []
-  )
+  const [inspectionsAll, setInspectionsAll] = useState<InspectionRow[]>([])
+const [loading, setLoading] = useState(true)
+const [error, setError] = useState<string | null>(null)
+
+useEffect(() => {
+  const ac = new AbortController()
+
+  setLoading(true)
+  setError(null)
+
+  fetchInspections(ac.signal)
+    .then(setInspectionsAll)
+    .catch((e) => setError(e?.message || "Failed to load"))
+    .finally(() => setLoading(false))
+
+  return () => ac.abort()
+}, [])
 
   const inspections = useMemo(() => {
     if (mode === "DAILY") {
       return inspectionsAll.filter((x) => {
-        const d = x.inspectedAt.split(" ")[0]
+        const d = ymd(x.inspectedAt)
         return inRange(d, fromDate || undefined, toDate || undefined)
       })
     }
     return inspectionsAll.filter((x) => {
-      const d = x.inspectedAt.split(" ")[0]
+      const d = ymd(x.inspectedAt)
       return inMonth(d, month)
     })
   }, [inspectionsAll, mode, fromDate, toDate, month])
@@ -510,7 +496,7 @@ export default function Dashboard() {
 
     const wk = new Map<string, { sesuai: number; tidakSesuai: number }>()
     inspections.forEach((x) => {
-      const d = x.inspectedAt.split(" ")[0]
+      const d = ymd(x.inspectedAt)
       const w = fakeWeekLabel(d)
       const cur = wk.get(w) ?? { sesuai: 0, tidakSesuai: 0 }
 
@@ -633,12 +619,22 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {isEmpty ? (
-        <EmptyState
-          title="Tidak ada data pada periode ini"
-          desc="Ubah range tanggal (Daily) atau bulan (Weekly). Jika data belum masuk, pastikan ingestion berjalan."
-        />
-      ) : (
+      {loading ? (
+      <div className="rounded-3xl border border-buma-border bg-white shadow-soft">
+        <div className="p-6 text-sm text-buma-muted">Loading data inspeksi…</div>
+      </div>
+    ) : error ? (
+      <div className="rounded-3xl border border-red-200 bg-red-50 shadow-soft">
+        <div className="p-6 text-sm text-red-700">
+          Gagal memuat data: <b>{error}</b>
+        </div>
+      </div>
+    ) : isEmpty ? (
+      <EmptyState
+        title="Tidak ada data pada periode ini"
+        desc="Ubah range tanggal (Daily) atau bulan (Weekly). Jika data belum masuk, pastikan ingestion berjalan."
+      />
+    ) : (
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             <DonutCompliance ok={compliance.ok} bad={compliance.bad} />

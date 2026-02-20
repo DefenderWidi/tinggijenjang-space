@@ -14,10 +14,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(200).end()
   if (req.method !== "PATCH") return res.status(405).json({ error: "Method not allowed" })
 
+  const parseBody = () => {
+    if (req.body == null || req.body === "") return {}
+    if (typeof req.body === "object") return req.body
+    if (typeof req.body === "string") {
+      try {
+        return JSON.parse(req.body)
+      } catch {
+        return null
+      }
+    }
+    return {}
+  }
+
   const id = String(req.query.id || "")
   if (!id) return res.status(400).json({ error: "Missing id" })
 
-  const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body
+  const body = parseBody()
+  if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
   const review_status: ReviewStatus | null =
     body?.review_status === "PENDING" || body?.review_status === "VALID" || body?.review_status === "REJECT"
       ? body.review_status

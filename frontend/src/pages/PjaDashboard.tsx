@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import AppLayout from "../layouts/AppLayout"
 
 type ReviewStatus = "PENDING" | "REVIEWED" | "VALID" | "REJECT"
@@ -614,21 +614,6 @@ function MetaCard({ k, v }: { k: string; v: string }) {
     <div className="rounded-2xl border border-buma-border bg-white p-3 text-xs">
       <div className="text-buma-muted">{k}</div>
       <div className="mt-1 font-extrabold text-buma-text">{v}</div>
-    </div>
-  )
-}
-
-function StatusChip({ label, ok }: { label: string; ok: boolean }) {
-  return (
-    <div
-      className={cls(
-        "rounded-2xl border p-2 text-center font-extrabold",
-        ok
-          ? "border-buma-green/25 bg-buma-green/10 text-buma-green"
-          : "border-buma-orange/25 bg-buma-orange/10 text-buma-orange"
-      )}
-    >
-      {label}: {ok ? "✓" : "✕"}
     </div>
   )
 }

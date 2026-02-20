@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import AppLayout from "../layouts/AppLayout"
 
-type KV = { k: string; v: string }
-
 function SectionTitle({
   no,
   title,
@@ -21,17 +19,6 @@ function SectionTitle({
         </div>
       </div>
       {desc ? <div className="mt-1 text-xs text-buma-muted">{desc}</div> : null}
-    </div>
-  )
-}
-
-function Chip({ k, v }: KV) {
-  return (
-    <div className="rounded-xl border border-buma-border bg-white/80 px-3 py-2 shadow-soft">
-      <div className="text-[10px] uppercase tracking-widest text-buma-muted">
-        {k}
-      </div>
-      <div className="text-xs font-semibold text-buma-text">{v}</div>
     </div>
   )
 }
@@ -172,14 +159,6 @@ export default function Measure() {
   const [hint, setHint] = useState<string>(
     "Upload foto → Mode Kalibrasi → klik 2 titik pada objek referensi."
   )
-
-  const status = useMemo(() => {
-    if (currentMeters == null) return { label: "NO DATA", tone: "info" as const }
-    const danger = currentMeters < MIN_BENCH || currentMeters > MAX_BENCH
-    return danger
-      ? { label: "DANGER", tone: "warn" as const }
-      : { label: "SAFE OPS", tone: "ok" as const }
-  }, [currentMeters])
 
   const [view, setView] = useState({ scale: 1, x: 0, y: 0 })
 
@@ -647,18 +626,6 @@ export default function Measure() {
     a.download = "Highwall_Measurement.png"
     a.click()
   }
-
-  const infoRows: KV[] = useMemo(() => {
-    return [
-      { k: "Calibration", v: pixelPerMeter ? "LOCKED" : "UNLOCKED" },
-      { k: "Mode", v: mode === "kalibrasi" ? "CALIBRATION" : "MEASURE" },
-      { k: "Orientation", v: orientation.toUpperCase() },
-      { k: "Lines", v: String(measurements.length) },
-    ]
-  }, [pixelPerMeter, mode, orientation, measurements.length])
-
-  const currentValueText = currentMeters == null ? "—" : currentMeters.toFixed(2)
-  const varianceText = currentMeters == null ? "—" : (currentMeters - MAX_BENCH).toFixed(2)
 
   return (
     <AppLayout>
@@ -1187,11 +1154,11 @@ export default function Measure() {
           : "Submit"
       }
       onClick={() => {
-        alert(
-          `Submit (demo)\n\nTotal measurement: ${measurements.length}\nLast: ${
-            currentMeters ? currentMeters.toFixed(2) + " m" : "—"
-          }`
-        )
+alert(
+  `Submit (demo)\n\nTotal measurement: ${measurements.length}\nLast: ${
+    currentMeters ? currentMeters.toFixed(2) + " m" : "—"
+  }\nAngle: ${currentDeg != null ? currentDeg.toFixed(1) + "°" : "—"}`
+)
       }}
     >
       {/* Submit icon */}
