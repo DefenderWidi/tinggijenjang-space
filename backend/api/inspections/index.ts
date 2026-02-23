@@ -5,7 +5,7 @@ import { supabaseAdmin } from "../../lib/supabaseAdmin"
 // nanti saat deploy, ganti ke domain FE Anda.
 function setCors(res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
@@ -51,7 +51,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : "PENDING"
 
     const payload = {
-      // DB columns (snake_case)
       inspector: String(body?.inspector ?? ""),
       shift,
       pelaksanaan: String(body?.pelaksanaan ?? ""),

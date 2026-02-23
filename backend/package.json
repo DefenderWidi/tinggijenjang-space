@@ -5,9 +5,11 @@
   "type": "module",
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
-    "@vercel/node": "^5.6.6"
+    "@vercel/node": "^5.6.6",
+    "formidable": "^3.5.4"
   },
   "devDependencies": {
+    "@types/formidable": "^3.4.6",
     "@types/node": "^20.11.30",
     "typescript": "^5.4.5"
   }

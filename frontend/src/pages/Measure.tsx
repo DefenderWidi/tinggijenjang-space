@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import AppLayout from "../layouts/AppLayout"
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
+
+// ===== UI helpers =====
 function SectionTitle({
   no,
   title,
@@ -34,10 +37,10 @@ function StatPill({
 }) {
   const cls =
     tone === "ok"
-      ? "bg-buma-green/10 text-buma-green border-buma-green/20"
+      ? "bg-gradient-to-r from-buma-green/10 to-buma-green/5 text-buma-green border-buma-green/20"
       : tone === "warn"
-        ? "bg-buma-orange/10 text-buma-orange border-buma-orange/20"
-        : "bg-buma-blue/10 text-buma-blue border-buma-blue/20"
+        ? "bg-gradient-to-r from-buma-orange/10 to-buma-orange/5 text-buma-orange border-buma-orange/20"
+        : "bg-gradient-to-r from-[#2D5EFC]/10 to-buma-blue/5 text-buma-blue border-buma-blue/20"
 
   return (
     <div className={`rounded-xl border px-3 py-2 ${cls}`}>
@@ -82,7 +85,6 @@ const NEAR = HIT_R * 2
 const ALPH = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 function labelFromIndex(i: number) {
-  // 0->A ... 25->Z ... 26->AA (opsional, aman kalau garis banyak)
   if (i < ALPH.length) return ALPH[i]
   const a = Math.floor(i / ALPH.length) - 1
   const b = i % ALPH.length
@@ -101,6 +103,8 @@ function angleDeg(a: Pt, b: Pt) {
   return (Math.atan2(dy, dx) * 180) / Math.PI
 }
 
+type Shift = "DAY" | "NIGHT"
+
 export default function Measure() {
   // ======= Refs =======
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -110,9 +114,9 @@ export default function Measure() {
   // ======= State =======
   const [imgSrc, setImgSrc] = useState<string>("")
   const [mode, setMode] = useState<"kalibrasi" | "ukur">("kalibrasi")
-  const [orientation, setOrientation] = useState<"vertical" | "horizontal" | "free">(
-    "vertical"
-  )
+  const [orientation, setOrientation] = useState<
+    "vertical" | "horizontal" | "free"
+  >("vertical")
 
   const [refMeterStr, setRefMeterStr] = useState<string>("7.80")
   const refMeter = useMemo(() => {
@@ -128,10 +132,7 @@ export default function Measure() {
     TIANG: 4,
   } as const
 
-  const [shiftTime, setShiftTime] = useState<"" | "START" | "MID" | "END">("")
-
   type RefKey = keyof typeof REF_MAP
-
   const [refKey, setRefKey] = useState<RefKey | "">("")
   const refSelected = refKey !== ""
 
@@ -141,6 +142,10 @@ export default function Measure() {
     setRefMeterStr(REF_MAP[refKey as RefKey].toFixed(2))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refKey])
+
+  // shift time (pelaksanaan) + shift (DAY/NIGHT)
+  const [shift, setShift] = useState<"" | Shift>("")
+  const [shiftTime, setShiftTime] = useState<"" | "START" | "MID" | "END">("")
 
   const [pixelPerMeter, setPixelPerMeter] = useState<number | null>(null)
   const [referenceLine, setReferenceLine] = useState<Line | null>(null)
@@ -157,28 +162,32 @@ export default function Measure() {
   const [currentDeg, setCurrentDeg] = useState<number | null>(null)
 
   const [hint, setHint] = useState<string>(
-    "Upload foto → Mode Kalibrasi → klik 2 titik pada objek referensi."
+    "Lengkapi data inspeksi → Upload foto → Kalibrasi → Ukur → Submit."
   )
 
   const [view, setView] = useState({ scale: 1, x: 0, y: 0 })
-
-  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
-
+  const clamp = (v: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, v))
   const zoomBy = (factor: number) => {
     setView((prev) => ({ ...prev, scale: clamp(prev.scale * factor, 0.5, 4) }))
   }
-
   const resetView = () => setView({ scale: 1, x: 0, y: 0 })
 
   const [inspectorName, setInspectorName] = useState("")
   const [areaId, setAreaId] = useState("")
+
   const [formError, setFormError] = useState(false)
   const [calError, setCalError] = useState(false)
   const [measureError, setMeasureError] = useState(false)
 
+  // submit state
+  const [inspectionId, setInspectionId] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   const isFormValid =
     inspectorName.trim() !== "" &&
     areaId.trim() !== "" &&
+    shift !== "" &&
     shiftTime !== ""
 
   // ======= Helpers =======
@@ -187,16 +196,12 @@ export default function Measure() {
     if (!canvas) return { x: 0, y: 0 }
 
     const r = canvas.getBoundingClientRect()
-
-    // posisi mouse pada canvas setelah transform (CSS space)
     const mx = e.clientX - r.left
     const my = e.clientY - r.top
 
-    // invert transform (balik ke coordinate sebelum zoom/pan)
     const ux = (mx - view.x) / view.scale
     const uy = (my - view.y) / view.scale
 
-    // map ke internal canvas coordinate (0..width/height)
     return {
       x: (ux * canvas.width) / r.width,
       y: (uy * canvas.height) / r.height,
@@ -210,7 +215,12 @@ export default function Measure() {
     return p
   }
 
-  function drawPoint(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
+  function drawPoint(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    color: string
+  ) {
     ctx.fillStyle = color
     ctx.beginPath()
     ctx.arc(x, y, HIT_R, 0, Math.PI * 2)
@@ -258,7 +268,6 @@ export default function Measure() {
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
 
-    // glow layer
     ctx.strokeStyle = colors.glow
     ctx.lineWidth = 12
     ctx.beginPath()
@@ -266,7 +275,6 @@ export default function Measure() {
     ctx.lineTo(b.x, b.y)
     ctx.stroke()
 
-    // dark outline
     ctx.strokeStyle = "rgba(0,0,0,.55)"
     ctx.lineWidth = 7
     ctx.beginPath()
@@ -274,7 +282,6 @@ export default function Measure() {
     ctx.lineTo(b.x, b.y)
     ctx.stroke()
 
-    // core line
     ctx.strokeStyle = colors.core
     ctx.lineWidth = 4
     ctx.beginPath()
@@ -282,7 +289,6 @@ export default function Measure() {
     ctx.lineTo(b.x, b.y)
     ctx.stroke()
 
-    // endpoints: putih + outline hitam
     drawPoint(ctx, a.x, a.y, "#FFFFFF")
     ctx.strokeStyle = "rgba(0,0,0,.55)"
     ctx.lineWidth = 2
@@ -295,7 +301,6 @@ export default function Measure() {
     ctx.arc(b.x, b.y, HIT_R + 2, 0, Math.PI * 2)
     ctx.stroke()
 
-    // label box
     const mx = (a.x + b.x) / 2
     const my = (a.y + b.y) / 2
 
@@ -311,14 +316,12 @@ export default function Measure() {
     ctx.lineWidth = 1
     roundRect(ctx, mx - w / 2, my - h - 10, w, h, 10, true, true)
 
-    // chip label
     ctx.fillStyle = colors.core
     roundRect(ctx, mx - w / 2 + 6, my - h - 10 + 6, 22, 22, 8, true, false)
     ctx.fillStyle = "#FFFFFF"
     ctx.font = "900 12px Arial"
     ctx.fillText(label, mx - w / 2 + 12, my - h - 10 + 21)
 
-    // text dengan outline putih
     ctx.font = "700 12px Arial"
     ctx.strokeStyle = "rgba(255,255,255,.9)"
     ctx.lineWidth = 3
@@ -336,11 +339,9 @@ export default function Measure() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // background
     ctx.fillStyle = "#F6FAF8"
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-    // draw image
     if (imgRef.current) {
       ctx.drawImage(imgRef.current, 0, 0, canvas.width, canvas.height)
     } else {
@@ -349,12 +350,17 @@ export default function Measure() {
       ctx.fillText("Upload photo to start measuring.", 16, 28)
     }
 
-    // reference
     if (referenceLine) {
-      drawLine(ctx, referenceLine.p1, referenceLine.p2, "REF", `${refMeter.toFixed(2)} m`, "ref")
+      drawLine(
+        ctx,
+        referenceLine.p1,
+        referenceLine.p2,
+        "REF",
+        `${refMeter.toFixed(2)} m`,
+        "ref"
+      )
     }
 
-    // measurements
     measurements.forEach((m, idx) => {
       if (!pixelPerMeter) return
       const meter = dist(m.p1, m.p2) / pixelPerMeter
@@ -371,7 +377,6 @@ export default function Measure() {
       )
     })
 
-    // in-progress
     if (tempPoints.length === 1) {
       const p = tempPoints[0]
       drawPoint(ctx, p.x, p.y, "red")
@@ -382,12 +387,113 @@ export default function Measure() {
   function ensureCanvasSize() {
     const canvas = canvasRef.current
     if (!canvas) return
-    // internal resolution aligned to UI height for good mapping
     const targetW = 1200
     const targetH = 560
     if (canvas.width !== targetW) canvas.width = targetW
     if (canvas.height !== targetH) canvas.height = targetH
   }
+
+  function computeStats() {
+    if (!pixelPerMeter) return null
+    const meters = measurements.map((m) => dist(m.p1, m.p2) / pixelPerMeter)
+    const maxHeightM = meters.length ? Math.max(...meters) : 0
+    const linesCount = meters.length
+    const linesOkCount = meters.filter((x) => x >= MIN_BENCH && x <= MAX_BENCH).length
+    return { maxHeightM, linesCount, linesOkCount }
+  }
+
+  function buildLinePayload() {
+  if (!pixelPerMeter) return []
+
+  return measurements.map((m, idx) => {
+    const label = m.label ?? labelFromIndex(idx)
+    const height_m = dist(m.p1, m.p2) / pixelPerMeter
+    return {
+      label,
+      height_m,      // ✅ snake_case sesuai API
+      ok: null as boolean | null, // inspector belum verifikasi, PJA yang isi
+    }
+  })
+}
+
+  async function canvasToFile(canvas: HTMLCanvasElement) {
+    const blob: Blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+        "image/png",
+        0.92
+      )
+    })
+    return new File([blob], `highwall-${Date.now()}.png`, { type: "image/png" })
+  }
+
+  async function createInspection(): Promise<string> {
+    const r = await fetch(`${API_BASE}/api/inspections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inspector: inspectorName.trim(),
+        shift,                 // DAY|NIGHT (match backend)
+        pelaksanaan: shiftTime, // START|MID|END (dipakai sebagai pelaksanaan)
+        front: areaId.trim(),
+        // summary awal (akan di-update setelah upload measure)
+        lines_count: 0,
+        lines_ok_count: 0,
+        max_height_m: 0,
+      }),
+    })
+    if (!r.ok) throw new Error(await r.text())
+    const j = await r.json()
+    return j?.data?.id as string
+  }
+
+  async function uploadMeasure(id: string) {
+    const canvas = canvasRef.current
+    if (!canvas) throw new Error("Canvas not ready")
+
+    const stats = computeStats()
+    if (!stats) throw new Error("Belum ada kalibrasi (Px/m)")
+
+    const file = await canvasToFile(canvas)
+
+    const fd = new FormData()
+    fd.append("inspection_id", id)
+    fd.append("max_height_m", String(stats.maxHeightM))
+    fd.append("lines_count", String(stats.linesCount))
+    fd.append("lines_ok_count", String(stats.linesOkCount))
+
+    // optional metadata (kalau kolomnya ada di inspection_measures)
+    fd.append("orientation", orientation)
+    fd.append("ref_unit", refKey || "")
+    fd.append("ref_meter", String(refMeter))
+    fd.append("pixel_per_meter", String(pixelPerMeter ?? ""))
+
+    fd.append("image", file)
+
+    const r = await fetch(`${API_BASE}/api/measures`, {
+      method: "POST",
+      body: fd,
+    })
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  }
+
+  async function saveInspectionLines(id: string) {
+  const lines = buildLinePayload()
+  if (!lines.length) throw new Error("Belum ada garis ukur untuk disimpan")
+
+  const r = await fetch(`${API_BASE}/api/inspection-lines`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      inspection_id: id,
+      lines, // [{label, height_m, ok}]
+    }),
+  })
+
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
 
   // ======= Upload =======
   async function onPickFile(file?: File) {
@@ -409,6 +515,7 @@ export default function Measure() {
       setCurrentMeters(null)
       setCurrentDeg(null)
       setDrag(null)
+      setInspectionId(null) // foto baru -> inspection baru
 
       resetView()
 
@@ -457,7 +564,6 @@ export default function Measure() {
 
     const m = getMouse(e)
 
-    // 1) drag measurement endpoints
     for (let i = measurements.length - 1; i >= 0; i--) {
       const line = measurements[i]
       if (near(m, line.p1)) {
@@ -472,7 +578,6 @@ export default function Measure() {
       }
     }
 
-    // 2) drag reference endpoints
     if (referenceLine) {
       if (near(m, referenceLine.p1)) {
         setDrag({ lineId: "ref", which: "p1", kind: "ref" })
@@ -486,7 +591,6 @@ export default function Measure() {
       }
     }
 
-    // create points
     const anchored = tempPoints.length === 1 ? tempPoints[0] : undefined
     const p = applyOrientation(m, anchored)
 
@@ -507,7 +611,6 @@ export default function Measure() {
 
     const m = getMouse(e)
 
-    // prototype-like lock behavior on drag
     const updatePoint = (anchor: Pt, target: Pt) => {
       if (orientation === "vertical") return { x: anchor.x, y: target.y }
       if (orientation === "horizontal") return { x: target.x, y: anchor.y }
@@ -542,19 +645,19 @@ export default function Measure() {
       return
     }
 
-    // measurement drag
     setMeasurements((prev) => {
       const idx = prev.findIndex((x) => x.id === drag.lineId)
       if (idx < 0) return prev
 
-      const copy = prev.map((x) => ({ ...x, p1: { ...x.p1 }, p2: { ...x.p2 } }))
+      const copy = prev.map((x) => ({
+        ...x,
+        p1: { ...x.p1 },
+        p2: { ...x.p2 },
+      }))
       const line = copy[idx]
 
-      if (drag.which === "p1") {
-        line.p1 = updatePoint(line.p1, m)
-      } else {
-        line.p2 = updatePoint(line.p2, m)
-      }
+      if (drag.which === "p1") line.p1 = updatePoint(line.p1, m)
+      else line.p2 = updatePoint(line.p2, m)
 
       if (pixelPerMeter) {
         const meter = dist(line.p1, line.p2) / pixelPerMeter
@@ -578,7 +681,6 @@ export default function Measure() {
     if (!imgRef.current) return
     const m = getMouse(e)
 
-    // delete measurement
     const hitM = measurements.find((o) => near(m, o.p1) || near(m, o.p2))
     if (hitM) {
       setMeasurements((prev) => prev.filter((x) => x.id !== hitM.id))
@@ -588,7 +690,6 @@ export default function Measure() {
       return
     }
 
-    // delete reference
     if (referenceLine && (near(m, referenceLine.p1) || near(m, referenceLine.p2))) {
       setReferenceLine(null)
       setPixelPerMeter(null)
@@ -616,6 +717,7 @@ export default function Measure() {
     setMode("kalibrasi")
     setHint("Reset OK. Mode Kalibrasi: klik 2 titik objek referensi.")
     resetView()
+    setInspectionId(null)
   }
 
   function exportImage() {
@@ -625,6 +727,40 @@ export default function Measure() {
     a.href = canvas.toDataURL("image/png")
     a.download = "Highwall_Measurement.png"
     a.click()
+  }
+
+  // ======= Submit handler =======
+  async function handleSubmit() {
+    if (isSubmitting) return
+    if (!isFormValid) {
+      setFormError(true)
+      setHint("Lengkapi Inspection Data dulu (Inspector, Front, Shift, Shift Time).")
+      return
+    }
+    if (!pixelPerMeter || measurements.length === 0) return
+
+    try {
+      setIsSubmitting(true)
+      setHint("Submitting... (create inspection + upload measure)")
+
+      let id = inspectionId
+      if (!id) {
+        id = await createInspection()
+        setInspectionId(id)
+      }
+
+      await uploadMeasure(id)
+await saveInspectionLines(id) // ✅ simpan per-titik
+
+      const stats = computeStats()
+      setHint(
+        `Submit OK ✅  (Max: ${stats?.maxHeightM.toFixed(2)} m, Lines: ${stats?.linesCount}, OK: ${stats?.linesOkCount})`
+      )
+    } catch (e: any) {
+      setHint(`Submit gagal ❌ ${e?.message ?? "unknown error"}`)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -642,10 +778,7 @@ export default function Measure() {
 
         <div className="flex items-start justify-end">
           <div className="relative max-w-[420px] rounded-xl border border-buma-border bg-white px-3 py-2 shadow-soft overflow-hidden">
-
-            {/* Accent line kiri */}
             <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-buma-green via-buma-blue to-buma-orange" />
-
             <div className="pl-3">
               <div className="text-[10px] font-semibold uppercase tracking-widest text-buma-muted">
                 Status
@@ -654,18 +787,14 @@ export default function Measure() {
                 {hint}
               </div>
             </div>
-
           </div>
         </div>
-
       </div>
 
       {/* Main layout */}
       <div className="grid gap-4 lg:grid-cols-[390px_1fr]">
         {/* LEFT PANEL */}
         <aside className="relative overflow-hidden rounded-2xl border border-buma-border bg-white shadow-soft">
-
-          {/* TOP GRADIENT STRIP */}
           <div className="absolute inset-x-0 top-0 h-[4px] bg-gradient-to-r from-buma-green via-buma-blue to-buma-orange" />
 
           <div className="p-4">
@@ -683,8 +812,8 @@ export default function Measure() {
                   }}
                   placeholder="Masukkan nama inspector"
                   className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition ${formError && !inspectorName
-                    ? "border-red-500"
-                    : "border-buma-border focus:border-buma-green/60"
+                      ? "border-red-500"
+                      : "border-buma-border focus:border-buma-green/60"
                     } bg-white`}
                 />
               </div>
@@ -701,12 +830,36 @@ export default function Measure() {
                   }}
                   placeholder="Contoh: Front 12-B Highwall"
                   className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition ${formError && !areaId
-                    ? "border-red-500"
-                    : "border-buma-border focus:border-buma-green/60"
+                      ? "border-red-500"
+                      : "border-buma-border focus:border-buma-green/60"
                     } bg-white`}
                 />
               </div>
 
+              {/* NEW: Shift DAY/NIGHT */}
+              <div className="grid gap-1">
+                <label className="text-[11px] font-semibold text-buma-muted">
+                  Shift (Pagi/Malam) <span className="text-buma-orange">*</span>
+                </label>
+
+                <select
+                  value={shift}
+                  onChange={(e) => {
+                    setShift(e.target.value as Shift)
+                    setFormError(false)
+                  }}
+                  className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${formError && !shift
+                      ? "border-red-500"
+                      : "border-buma-border focus:border-buma-green/60"
+                    }`}
+                >
+                  <option value="">Pilih shift</option>
+                  <option value="DAY">Pagi (DAY)</option>
+                  <option value="NIGHT">Malam (NIGHT)</option>
+                </select>
+              </div>
+
+              {/* pelaksanaan = START/MID/END */}
               <div className="grid gap-1">
                 <label className="text-[11px] font-semibold text-buma-muted">
                   Shift Time <span className="text-buma-orange">*</span>
@@ -719,8 +872,8 @@ export default function Measure() {
                     setFormError(false)
                   }}
                   className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${formError && !shiftTime
-                    ? "border-red-500"
-                    : "border-buma-border focus:border-buma-green/60"
+                      ? "border-red-500"
+                      : "border-buma-border focus:border-buma-green/60"
                     }`}
                 >
                   <option value="">Pilih waktu inspeksi</option>
@@ -740,8 +893,8 @@ export default function Measure() {
 
               <button
                 className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold text-white shadow-soft transition-all duration-200 active:scale-95 ${isFormValid
-                  ? "bg-gradient-to-r from-buma-green to-buma-blue hover:opacity-95"
-                  : "bg-gray-400 cursor-not-allowed"
+                    ? "bg-gradient-to-r from-[#15803D] to-[#22A745] hover:opacity-85"
+                    : "bg-gray-400 cursor-not-allowed"
                   }`}
                 type="button"
                 onClick={() => {
@@ -764,13 +917,12 @@ export default function Measure() {
                     <path d="M3 13v-3H1v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3h-2v3z" />
                   </g>
                 </svg>
-
                 Import Photo (Source)
               </button>
 
               {formError && !isFormValid && (
                 <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
-                  ⚠ Inspector Name, Area / Front ID, dan Shift Time wajib diisi sebelum mengimpor foto.
+                  ⚠ Inspector, Area/Front, Shift (DAY/NIGHT), dan Shift Time wajib diisi sebelum mengimpor foto.
                 </div>
               )}
             </div>
@@ -784,7 +936,6 @@ export default function Measure() {
             />
 
             <div className="grid gap-3">
-              {/* Reference picker */}
               <div>
                 <label className="text-[11px] font-semibold text-buma-muted">
                   Reference Unit <span className="text-buma-orange">*</span>
@@ -797,10 +948,9 @@ export default function Measure() {
                       const v = e.target.value as RefKey | ""
                       setRefKey(v)
 
-                      setCalError(false)     // reset error kalibrasi
-                      setFormError(false)    // optional: reset error inspeksi
+                      setCalError(false)
+                      setFormError(false)
 
-                      // reset kalibrasi kalau ref berubah
                       setPixelPerMeter(null)
                       setReferenceLine(null)
                       setTempPoints([])
@@ -812,8 +962,8 @@ export default function Measure() {
                       )
                     }}
                     className={`w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none transition ${!refSelected && calError
-                      ? "border-red-500"
-                      : "border-buma-border focus:border-buma-green/60"
+                        ? "border-red-500"
+                        : "border-buma-border focus:border-buma-green/60"
                       }`}
                   >
                     <option value="">— Pilih unit referensi —</option>
@@ -825,11 +975,10 @@ export default function Measure() {
                 </div>
               </div>
 
-              {/* Action button (only one) */}
               <button
                 className={`rounded-xl px-4 py-2.5 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${refSelected
-                  ? "bg-buma-blue text-white hover:opacity-95"
-                  : "bg-gray-200 text-gray-500"
+                    ? "bg-gradient-to-r from-[#2D5EFC] to-buma-blue text-white hover:opacity-85"
+                    : "bg-gray-200 text-gray-500"
                   }`}
                 type="button"
                 onClick={() => {
@@ -847,14 +996,12 @@ export default function Measure() {
                 Set Points
               </button>
 
-              {/* error message */}
               {calError && !refSelected && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
                   ⚠ Pilih unit referensi (EX3600 / EX2500) sebelum melakukan kalibrasi.
                 </div>
               )}
 
-              {/* Stats */}
               <div className="grid grid-cols-2 gap-2">
                 <StatPill
                   label="Px/m"
@@ -897,11 +1044,12 @@ export default function Measure() {
                   <option value="free">Free</option>
                 </select>
               </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <button
                   className={`rounded-xl px-4 py-2.5 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${refSelected && pixelPerMeter
-                    ? "bg-buma-green text-white hover:opacity-95"
-                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                      ? "bg-gradient-to-r from-[#15803D] to-[#22A745] text-white hover:opacity-85"
+                      : "bg-gray-200 text-gray-500 cursor-not-allowed"
                     }`}
                   type="button"
                   onClick={() => {
@@ -940,7 +1088,6 @@ export default function Measure() {
                 </button>
               </div>
 
-              {/* Error message khusus Start Measure */}
               {measureError && (!refSelected || !pixelPerMeter) && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
                   {!refSelected ? (
@@ -950,13 +1097,9 @@ export default function Measure() {
                   )}
                 </div>
               )}
-              {/* Info ringkas: hanya Orientation & Lines */}
+
               <div className="grid grid-cols-2 gap-2">
-                <StatPill
-                  label="Orientation"
-                  value={orientation.toUpperCase()}
-                  tone="info"
-                />
+                <StatPill label="Orientation" value={orientation.toUpperCase()} tone="info" />
                 <StatPill
                   label="Lines"
                   value={String(measurements.length)}
@@ -978,19 +1121,14 @@ export default function Measure() {
                   <div className="text-sm font-extrabold text-buma-text">Photo Workspace</div>
 
                   <div className="flex items-center gap-2">
-
-                    {/* SEGMENTED CONTROL */}
                     <div className="relative inline-grid grid-cols-2 rounded-xl border border-buma-border bg-white shadow-soft p-[3px]">
-
-                      {/* Slider background */}
                       <div
                         className={`pointer-events-none absolute top-[3px] left-[3px] h-[calc(100%-6px)] w-[calc(50%-3px)] rounded-lg transition-all duration-200 ${mode === "kalibrasi"
-                          ? "translate-x-0 bg-buma-blue"
-                          : "translate-x-full bg-buma-green"
+                            ? "translate-x-0 bg-buma-blue"
+                            : "translate-x-full bg-buma-green"
                           }`}
                       />
 
-                      {/* Kalibrasi */}
                       <button
                         type="button"
                         onClick={() => {
@@ -999,18 +1137,19 @@ export default function Measure() {
                           setHint("Mode Kalibrasi: klik 2 titik objek referensi.")
                         }}
                         className={`relative z-10 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-extrabold transition ${mode === "kalibrasi"
-                          ? "text-white"
-                          : "text-buma-text hover:bg-black/5"
+                            ? "bg-gradient-to-r from-[#2D5EFC] to-buma-blue text-white"
+                            : "text-buma-text hover:bg-black/5"
                           }`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                          <path fill="currentColor"
-                            d="M11 2h2v3.07A7.002 7.002 0 0 1 18.93 11H22v2h-3.07A7.002 7.002 0 0 1 13 18.93V22h-2v-3.07A7.002 7.002 0 0 1 5.07 13H2v-2h3.07A7.002 7.002 0 0 1 11 5.07zM12 7a5 5 0 1 0 0 10a5 5 0 0 0 0-10" />
+                          <path
+                            fill="currentColor"
+                            d="M11 2h2v3.07A7.002 7.002 0 0 1 18.93 11H22v2h-3.07A7.002 7.002 0 0 1 13 18.93V22h-2v-3.07A7.002 7.002 0 0 1 5.07 13H2v-2h3.07A7.002 7.002 0 0 1 11 5.07zM12 7a5 5 0 1 0 0 10a5 5 0 0 0 0-10"
+                          />
                         </svg>
                         Kalibrasi
                       </button>
 
-                      {/* Ukur */}
                       <button
                         type="button"
                         disabled={!pixelPerMeter}
@@ -1020,37 +1159,37 @@ export default function Measure() {
                           setHint("Mode Ukur: klik 2 titik untuk ukur jenjang.")
                         }}
                         className={`relative z-10 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-extrabold transition ${mode === "ukur"
-                          ? "text-white"
-                          : "text-buma-text hover:bg-black/5"
+                            ? "bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
+                            : "text-buma-text hover:bg-black/5"
                           } ${!pixelPerMeter ? "opacity-50 cursor-not-allowed hover:bg-transparent" : ""}`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                          <path fill="currentColor"
-                            d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83l3.75 3.75z" />
+                          <path
+                            fill="currentColor"
+                            d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83l3.75 3.75z"
+                          />
                         </svg>
                         Ukur
                       </button>
                     </div>
 
-                    {/* RESET */}
                     <button
                       type="button"
                       onClick={resetAll}
                       className="inline-flex items-center gap-2 rounded-xl border border-buma-border bg-white px-3 py-2 text-xs font-extrabold text-buma-text shadow-soft hover:bg-black/5"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                        <path fill="currentColor"
-                          d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 1 1-9.9-1h-2.1A7 7 0 1 0 12 6" />
+                        <path
+                          fill="currentColor"
+                          d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 1 1-9.9-1h-2.1A7 7 0 1 0 12 6"
+                        />
                       </svg>
                       Reset
                     </button>
-
                   </div>
-
                 </div>
 
                 <div className="relative w-full">
-                  {/* VIEWPORT (nge-clip zoom biar nggak nindih section bawah) */}
                   <div className="relative h-[560px] w-full overflow-hidden rounded-xl border border-buma-border bg-white">
                     <canvas
                       ref={canvasRef}
@@ -1093,10 +1232,7 @@ export default function Measure() {
                   </div>
                 </div>
 
-
                 <div className="mt-3 flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 text-xs sm:flex-wrap sm:overflow-visible sm:whitespace-normal">
-
-                  {/* INFO BADGE */}
                   <div className="shrink-0 flex items-center justify-center h-7 w-7 rounded-full bg-buma-blue/10 border border-buma-blue/20">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -1118,15 +1254,12 @@ export default function Measure() {
                   <div className="shrink-0 rounded-xl border border-buma-blue/20 bg-buma-blue/5 px-3 py-2 text-buma-blue">
                     <span className="font-semibold">Klik kiri</span> untuk set 2 titik
                   </div>
-
                   <div className="shrink-0 rounded-xl border border-buma-blue/20 bg-buma-blue/5 px-3 py-2 text-buma-blue">
                     <span className="font-semibold">Drag</span> endpoint untuk adjust
                   </div>
-
                   <div className="shrink-0 rounded-xl border border-buma-blue/20 bg-buma-blue/5 px-3 py-2 text-buma-blue">
                     <span className="font-semibold">Klik kanan</span> dekat titik untuk hapus
                   </div>
-
                 </div>
               </div>
             </div>
@@ -1139,74 +1272,66 @@ export default function Measure() {
               <IconButton label="Capture" icon="📷" onClick={exportImage} />
             </div>
 
-           {/* Bottom bar (actions only) */}
-<div className="sticky bottom-0 w-full border-t border-buma-border bg-white/95 backdrop-blur">
-  <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
-    <button
-      className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-buma-green to-buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-50"
-      type="button"
-      disabled={!pixelPerMeter || measurements.length === 0}
-      title={
-        !pixelPerMeter
-          ? "Kalibrasi dulu"
-          : measurements.length === 0
-          ? "Belum ada garis ukur"
-          : "Submit"
-      }
-      onClick={() => {
-alert(
-  `Submit (demo)\n\nTotal measurement: ${measurements.length}\nLast: ${
-    currentMeters ? currentMeters.toFixed(2) + " m" : "—"
-  }\nAngle: ${currentDeg != null ? currentDeg.toFixed(1) + "°" : "—"}`
-)
-      }}
-    >
-      {/* Submit icon */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        className="shrink-0"
-      >
-        <path
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2"
-          d="M10 14L21 3m0 0l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z"
-        />
-      </svg>
+            {/* Bottom bar */}
+            <div className="sticky bottom-0 w-full border-t border-buma-border bg-white/95 backdrop-blur">
+              <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
+                <button
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-50"
+                  type="button"
+                  disabled={isSubmitting || !pixelPerMeter || measurements.length === 0}
+                  title={
+                    isSubmitting
+                      ? "Submitting..."
+                      : !pixelPerMeter
+                        ? "Kalibrasi dulu"
+                        : measurements.length === 0
+                          ? "Belum ada garis ukur"
+                          : "Submit"
+                  }
+                  onClick={handleSubmit}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    className="shrink-0"
+                  >
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M10 14L21 3m0 0l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z"
+                    />
+                  </svg>
+                  {isSubmitting ? "Submitting..." : "Submit"}
+                </button>
 
-      Finalize & Submit
-    </button>
-
-    <button
-    className="inline-flex items-center justify-center gap-2 rounded-xl border border-buma-blue/30 bg-buma-blue/10 px-4 py-2.5 text-sm font-extrabold text-buma-blue shadow-soft transition-all duration-150 hover:bg-buma-blue/20 hover:border-buma-blue/40 active:scale-95 disabled:opacity-40"
-      type="button"
-      disabled={!imgSrc}
-      onClick={exportImage}
-      title={!imgSrc ? "Upload foto dulu" : "Save as PDF"}
-    >
-      {/* PDF icon */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="15"
-        height="15"
-        viewBox="0 0 15 15"
-        className="shrink-0"
-      >
-        <path
-          fill="currentColor"
-          d="M2.5 6.5V6H2v.5zm4 0V6H6v.5zm0 4H6v.5h.5zm7-7h.5v-.207l-.146-.147zm-3-3l.354-.354L10.707 0H10.5zM2.5 7h1V6h-1zm.5 4V8.5H2V11zm0-2.5v-2H2v2zm.5-.5h-1v1h1zm.5-.5a.5.5 0 0 1-.5.5v1A1.5 1.5 0 0 0 5 7.5zM3.5 7a.5.5 0 0 1 .5.5h1A1.5 1.5 0 0 0 3.5 6zM6 6.5v4h1v-4zm.5 4.5h1v-1h-1zM9 9.5v-2H8v2zM7.5 6h-1v1h1zM9 7.5A1.5 1.5 0 0 0 7.5 6v1a.5.5 0 0 1 .5.5zM7.5 11A1.5 1.5 0 0 0 9 9.5H8a.5.5 0 0 1-.5.5zM10 6v5h1V6zm.5 1H13V6h-2.5zm0 2H12V8h-1.5zM2 5V1.5H1V5zm11-1.5V5h1V3.5zM2.5 1h8V0h-8zm7.646-.146l3 3l.708-.708l-3-3zM2 1.5a.5.5 0 0 1 .5-.5V0A1.5 1.5 0 0 0 1 1.5zM1 12v1.5h1V12zm1.5 3h10v-1h-10zM14 13.5V12h-1v1.5zM12.5 15a1.5 1.5 0 0 0 1.5-1.5h-1a.5.5 0 0 1-.5.5zM1 13.5A1.5 1.5 0 0 0 2.5 15v-1a.5.5 0 0 1-.5-.5z"
-        />
-      </svg>
-
-      Save as PDF
-    </button>
-  </div>
-</div>
+                <button
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#15803D]/20 bg-buma-blue/5 px-4 py-2.5 text-sm font-extrabold text-buma-blue shadow-soft transition-all duration-150 hover:bg-buma-blue/15 hover:border-buma-blue/40 active:scale-95 disabled:opacity-40"
+                  type="button"
+                  disabled={!imgSrc}
+                  onClick={exportImage}
+                  title={!imgSrc ? "Upload foto dulu" : "Save as PNG"}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 15 15"
+                    className="shrink-0"
+                  >
+                    <path
+                      fill="currentColor"
+                      d="M2.5 6.5V6H2v.5zm4 0V6H6v.5zm0 4H6v.5h.5zm7-7h.5v-.207l-.146-.147zm-3-3l.354-.354L10.707 0H10.5zM2.5 7h1V6h-1zm.5 4V8.5H2V11zm0-2.5v-2H2v2zm.5-.5h-1v1h1zm.5-.5a.5.5 0 0 1-.5.5v1A1.5 1.5 0 0 0 5 7.5zM3.5 7a.5.5 0 0 1 .5.5h1A1.5 1.5 0 0 0 3.5 6zM6 6.5v4h1v-4zm.5 4.5h1v-1h-1zM9 9.5v-2H8v2zM7.5 6h-1v1h1zM9 7.5A1.5 1.5 0 0 0 7.5 6v1a.5.5 0 0 1 .5.5zM7.5 11A1.5 1.5 0 0 0 9 9.5H8a.5.5 0 0 1-.5.5zM10 6v5h1V6zm.5 1H13V6h-2.5zm0 2H12V8h-1.5zM2 5V1.5H1V5zm11-1.5V5h1V3.5zM2.5 1h8V0h-8zm7.646-.146l3 3l.708-.708l-3-3zM2 1.5a.5.5 0 0 1 .5-.5V0A1.5 1.5 0 0 0 1 1.5zM1 12v1.5h1V12zm1.5 3h10v-1h-10zM14 13.5V12h-1v1.5zM12.5 15a1.5 1.5 0 0 0 1.5-1.5h-1a.5.5 0 0 1-.5.5zM1 13.5A1.5 1.5 0 0 0 2.5 15v-1a.5.5 0 0 1-.5-.5z"
+                    />
+                  </svg>
+                  Save as PNG
+                </button>
+              </div>
+            </div>
           </div>
         </section>
       </div>

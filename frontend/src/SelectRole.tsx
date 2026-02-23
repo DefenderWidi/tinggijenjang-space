@@ -29,9 +29,12 @@ function saveSessionMerge(patch: Record<string, any>) {
 
 function roleLabel(role: Role) {
   switch (role) {
-    case "FIELD": return "Inspector Lapangan"
-    case "PJA": return "Verifikasi PJA"
-    case "EVALUATOR": return "Evaluator"
+    case "FIELD":
+      return "Inspector Lapangan"
+    case "PJA":
+      return "Verifikasi PJA"
+    case "EVALUATOR":
+      return "Evaluator"
   }
 }
 
@@ -42,7 +45,6 @@ export default function SelectRole() {
   const session = useMemo(() => getSession(), [])
   const username = session?.username as string | undefined
 
-  // Guard: kalau belum ada username (belum login), balik ke login
   useEffect(() => {
     if (!username) nav("/", { replace: true })
   }, [username, nav])
@@ -56,29 +58,34 @@ export default function SelectRole() {
   }
 
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-screen overflow-hidden">
       {/* Background */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/LoginBackground.jpeg')" }}
       />
-      <div className="absolute inset-0 bg-black/55" />
+      <div className="absolute inset-0 bg-black/60" />
+
+      {/* soft accents (samakan dengan Login) */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 -left-40 h-[520px] w-[520px] rounded-full bg-buma-green/12 blur-3xl" />
+        <div className="absolute -bottom-40 -right-40 h-[520px] w-[520px] rounded-full bg-buma-orange/10 blur-3xl" />
+      </div>
 
       <div className="relative z-10 flex min-h-screen items-center">
         <div className="mx-auto w-full max-w-[1600px] px-4">
-          <div className="grid gap-8 lg:grid-cols-2">
-
-            {/* LEFT PANEL (copy dari Login Anda, biar konsisten) */}
-            <div className="hidden lg:flex flex-col justify-center">
-              <div className="max-w-xl pl-8 xl:pl-14">
-                <div className="mb-5 inline-flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur">
+          <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
+            {/* LEFT PANEL (DESKTOP ONLY) */}
+            <div className="hidden lg:flex flex-col justify-center lg:pl-14 xl:pl-20">
+              <div className="max-w-lg">
+                <div className="mb-5 inline-flex items-center gap-3 rounded-3xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-xl">
                   <img
                     src="/PT.-BUMA-Logo-Vector.svg-.png"
                     alt="PT BUMA Logo"
                     className="h-9 w-auto object-contain"
                   />
                   <div className="leading-tight">
-                    <div className="text-xs font-semibold uppercase tracking-widest text-white/70">
+                    <div className="text-xs font-semibold uppercase tracking-[0.26em] text-white/70">
                       Production Division
                     </div>
                     <div className="text-sm font-extrabold text-white">
@@ -87,24 +94,28 @@ export default function SelectRole() {
                   </div>
                 </div>
 
-                <h1 className="text-3xl font-extrabold text-white leading-tight">
-                  Monitoring
-                  <br />
-                  <span className="text-buma-green">Tinggi Jenjang</span>
-                </h1>
+                <div className="relative">
+                  <div className="absolute -left-5 top-1 hidden h-24 w-1 rounded-full bg-gradient-to-b from-buma-green via-buma-green/70 to-transparent lg:block" />
 
-                <p className="mt-3 max-w-md text-sm text-white/80">
-                  Sistem pendukung inspeksi dan dokumentasi tinggi jenjang berbasis foto.
-                </p>
+                  <h1 className="text-[36px] xl:text-[42px] font-extrabold text-white leading-[1.05] tracking-tight">
+                    Monitoring
+                    <br className="hidden lg:block" />
+                    <span className="text-buma-green">Tinggi Jenjang</span>
+                  </h1>
 
-                <div className="mt-6 text-xs text-white/60">
-                  PT Bukit Makmur Mandiri Utama
+                  <p className="mt-3 max-w-md text-sm xl:text-base text-white/80 leading-relaxed">
+                    Pilih role untuk melanjutkan ke workspace sesuai kewenangan.
+                  </p>
+
+                  <div className="mt-6 text-xs text-white/60">
+                    PT Bukit Makmur Mandiri Utama
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* RIGHT CARD */}
-            <div className="flex items-center justify-center">
+            {/* RIGHT CARD (mobile: hanya card, clean) */}
+            <div className="flex items-center justify-center py-10 lg:py-0">
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -120,9 +131,7 @@ export default function SelectRole() {
 
                 <div className="relative">
                   <div className="mb-4">
-                    <div className="text-xl font-extrabold text-white">
-                      Pilih Role
-                    </div>
+                    <div className="text-xl font-extrabold text-white">Pilih Role</div>
                     <div className="mt-1 text-sm text-white/75">
                       Login as <span className="font-semibold text-white">{username}</span>
                     </div>
@@ -133,7 +142,7 @@ export default function SelectRole() {
                     animate="show"
                     variants={{
                       hidden: {},
-                      show: { transition: { staggerChildren: 0.08 } }
+                      show: { transition: { staggerChildren: 0.08 } },
                     }}
                     className="grid gap-3"
                   >
@@ -192,7 +201,6 @@ export default function SelectRole() {
                       </span>
                     </div>
                   </div>
-
                 </div>
               </motion.div>
             </div>
@@ -204,7 +212,7 @@ export default function SelectRole() {
   )
 }
 
-/* ===== Role Card (copy utuh dari file Anda) ===== */
+/* ===== Role Card ===== */
 function RoleCard({
   title,
   desc,
@@ -235,9 +243,10 @@ function RoleCard({
         rounded-3xl border p-4
         backdrop-blur-xl overflow-hidden
         transition-all duration-300
-        ${active
-          ? "border-[#22A745]/60 bg-white/20 shadow-[0_0_28px_rgba(34,167,69,0.22)]"
-          : "border-white/20 bg-white/12 hover:bg-white/18"
+        ${
+          active
+            ? "border-[#22A745]/60 bg-white/20 shadow-[0_0_28px_rgba(34,167,69,0.22)]"
+            : "border-white/20 bg-white/12 hover:bg-white/18"
         }
       `}
     >
@@ -287,9 +296,10 @@ function RoleCard({
               className={`
                 shrink-0 rounded-xl px-3 py-1.5 text-[11px]
                 font-extrabold tracking-widest border
-                ${active
-                  ? "bg-[#22A745]/22 text-white border-[#22A745]/55"
-                  : "bg-white/10 text-white/85 border-white/20"
+                ${
+                  active
+                    ? "bg-[#22A745]/22 text-white border-[#22A745]/55"
+                    : "bg-white/10 text-white/85 border-white/20"
                 }
               `}
             >
@@ -309,9 +319,10 @@ function RoleCard({
       <div
         className={`
           pointer-events-none absolute inset-x-0 bottom-0 h-[2px]
-          ${active
-            ? "bg-gradient-to-r from-transparent via-[#22A745]/70 to-transparent"
-            : "bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-60"
+          ${
+            active
+              ? "bg-gradient-to-r from-transparent via-[#22A745]/70 to-transparent"
+              : "bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-60"
           }
         `}
       />
