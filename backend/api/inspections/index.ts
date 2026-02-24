@@ -1,20 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
 import { supabaseAdmin } from "../../lib/supabaseAdmin"
-
-// sementara: izinkan semua origin saat local/dev.
-// nanti saat deploy, ganti ke domain FE Anda.
-function setCors(res: VercelResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*")
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
-}
+import { applyCors } from "../../_lib/cors" // 
 
 type Shift = "DAY" | "NIGHT"
 type ReviewStatus = "PENDING" | "VALID" | "REJECT"
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  setCors(res)
-  if (req.method === "OPTIONS") return res.status(200).end()
+  if (applyCors(req, res)) return
 
   const parseBody = () => {
     if (req.body == null || req.body === "") return {}
@@ -44,7 +36,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = parseBody()
     if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
 
-    const shift: Shift | null = body?.shift === "DAY" || body?.shift === "NIGHT" ? body.shift : null
+    const shift: Shift | null =
+      body?.shift === "DAY" || body?.shift === "NIGHT" ? body.shift : null
+
     const review_status: ReviewStatus =
       body?.review_status === "VALID" || body?.review_status === "REJECT" || body?.review_status === "PENDING"
         ? body.review_status
@@ -60,7 +54,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       max_height_m: Number(body?.max_height_m ?? 0),
       reviewed_by: body?.reviewed_by ? String(body.reviewed_by) : null,
       review_status,
-      // inspected_at optional, kalau tidak dikirim pakai default now()
       ...(body?.inspected_at ? { inspected_at: String(body.inspected_at) } : {}),
     }
 
@@ -68,7 +61,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Required: inspector, shift(DAY|NIGHT), pelaksanaan, front" })
     }
 
-    const { data, error } = await supabaseAdmin.from("inspections").insert(payload).select("*").single()
+    const { data, error } = await supabaseAdmin
+      .from("inspections")
+      .insert(payload)
+      .select("*")
+      .single()
+
     if (error) return res.status(500).json({ error: error.message })
     return res.status(201).json({ data })
   }

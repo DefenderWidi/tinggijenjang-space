@@ -82,7 +82,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ---------- GET /api/inspection-lines?inspection_id=... ----------
   if (req.method === "GET") {
     const inspection_id = String(req.query?.inspection_id ?? "").trim()
-    if (!inspection_id) return res.status(400).json({ error: "inspection_id is required" })
+    if (!inspection_id) {
+      return res.status(400).json({ error: "inspection_id is required" })
+    }
 
     const { data, error } = await supabaseAdmin
       .from("inspection_lines")
@@ -101,9 +103,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = parseBody(req)
     if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
 
-    const inspection_id = String(body.inspection_id ?? "").trim()
+    const inspection_id = String((body as any).inspection_id ?? "").trim()
     const rawLinesUnknown = (body as any).lines
-    const rawLines: RawLine[] = Array.isArray(rawLinesUnknown) ? (rawLinesUnknown as RawLine[]) : []
+    const rawLines: RawLine[] = Array.isArray(rawLinesUnknown)
+      ? (rawLinesUnknown as RawLine[])
+      : []
 
     if (!inspection_id) return res.status(400).json({ error: "Required: inspection_id" })
     if (!rawLines.length) return res.status(400).json({ error: "Required: lines[] (non-empty)" })
@@ -112,19 +116,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .map((x) => toLinePayload(inspection_id, x))
       .filter((item) => item.label.length > 0)
 
-    if (!payload.length) return res.status(400).json({ error: "lines[] is empty after validation" })
-
-    // Optional: if you want to enforce height_m must exist, uncomment:
-    // if (payload.some(p => p.height_m == null)) {
-    //   return res.status(400).json({ error: "Some lines are missing a valid height_m (>0). Please send height_m." })
-    // }
+    if (!payload.length) {
+      return res.status(400).json({ error: "lines[] is empty after validation" })
+    }
 
     // delete old
-    const del = await supabaseAdmin.from("inspection_lines").delete().eq("inspection_id", inspection_id)
+    const del = await supabaseAdmin
+      .from("inspection_lines")
+      .delete()
+      .eq("inspection_id", inspection_id)
+
     if (del.error) return res.status(500).json({ error: del.error.message })
 
     // insert new
-    const ins = await supabaseAdmin.from("inspection_lines").insert(payload).select("*")
+    const ins = await supabaseAdmin
+      .from("inspection_lines")
+      .insert(payload)
+      .select("*")
+
     if (ins.error) return res.status(500).json({ error: ins.error.message })
 
     return res.status(200).json({ data: ins.data })

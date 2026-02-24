@@ -1,8 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
 import { supabaseAdmin } from "../../lib/supabaseAdmin"
 
-function setCors(res: VercelResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*")
+function setCors(req: VercelRequest, res: VercelResponse) {
+  const origin = req.headers.origin || "*"
+  res.setHeader("Access-Control-Allow-Origin", origin)
+  res.setHeader("Vary", "Origin")
   res.setHeader("Access-Control-Allow-Methods", "GET,PATCH,OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
@@ -22,11 +24,17 @@ function parseBody(req: VercelRequest) {
   return {}
 }
 
+function getId(req: VercelRequest) {
+  const q = req.query.id
+  const raw = Array.isArray(q) ? q[0] : q
+  return String(raw ?? "").trim()
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  setCors(res)
+  setCors(req, res)
   if (req.method === "OPTIONS") return res.status(200).end()
 
-  const id = String(req.query.id ?? "").trim()
+  const id = getId(req)
   if (!id) return res.status(400).json({ error: "Missing id" })
 
   if (req.method === "GET") {
@@ -34,9 +42,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from("inspections")
       .select("*")
       .eq("id", id)
-      .single()
+      .maybeSingle()
 
     if (error) return res.status(500).json({ error: error.message })
+    if (!data) return res.status(404).json({ error: "Inspection not found" })
+
     return res.status(200).json({ data })
   }
 
@@ -44,30 +54,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = parseBody(req)
     if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
 
-    const review_status: ReviewStatus =
-      body?.review_status === "VALID" || body?.review_status === "REJECT" || body?.review_status === "PENDING"
-        ? body.review_status
-        : "PENDING"
+    // review_status hanya di-set kalau memang dikirim dan valid
+    const incomingStatus = body?.review_status
+    const review_status: ReviewStatus | undefined =
+      incomingStatus === "VALID" || incomingStatus === "REJECT" || incomingStatus === "PENDING"
+        ? incomingStatus
+        : undefined
 
-    const payload: any = {
-      review_status,
-      reviewed_by: body?.reviewed_by ? String(body.reviewed_by) : null,
-      lines_ok_count: body?.lines_ok_count != null ? Number(body.lines_ok_count) : undefined,
-      review_notes: body?.review_notes != null ? String(body.review_notes) : undefined,
-      // reviewed_at: new Date().toISOString(), // opsional kalau ada kolomnya
+    const payload: Record<string, any> = {}
+
+    if (review_status !== undefined) payload.review_status = review_status
+    if (body?.reviewed_by != null) payload.reviewed_by = body.reviewed_by ? String(body.reviewed_by) : null
+    if (body?.lines_ok_count != null) payload.lines_ok_count = Number(body.lines_ok_count)
+    if (body?.review_notes != null) payload.review_notes = String(body.review_notes)
+
+    if (Object.keys(payload).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" })
     }
-
-    // buang undefined biar tidak overwrite
-    Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k])
 
     const { data, error } = await supabaseAdmin
       .from("inspections")
       .update(payload)
       .eq("id", id)
       .select("*")
-      .single()
+      .maybeSingle()
 
     if (error) return res.status(500).json({ error: error.message })
+    if (!data) return res.status(404).json({ error: "Inspection not found" })
+
     return res.status(200).json({ data })
   }
 
