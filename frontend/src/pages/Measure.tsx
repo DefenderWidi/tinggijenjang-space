@@ -190,6 +190,12 @@ export default function Measure() {
     shift !== "" &&
     shiftTime !== ""
 
+  const WORK_H = 560
+  const [canvasSize, setCanvasSize] = useState<{ w: number; h: number }>({
+    w: 1200,
+    h: WORK_H,
+  })
+
   // ======= Helpers =======
   function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
     const canvas = canvasRef.current
@@ -387,10 +393,26 @@ export default function Measure() {
   function ensureCanvasSize() {
     const canvas = canvasRef.current
     if (!canvas) return
-    const targetW = 1200
-    const targetH = 560
+
+    const img = imgRef.current
+
+    // default kalau belum ada image
+    const targetH = WORK_H
+    let targetW = 1200
+
+    // kalau ada image, sesuaikan lebar agar aspect ratio asli terjaga
+    if (img && img.naturalWidth && img.naturalHeight) {
+      const ratio = img.naturalWidth / img.naturalHeight
+      targetW = Math.round(targetH * ratio)
+
+      // optional: batasin biar ga kegedean banget
+      targetW = clamp(targetW, 560, 3200)
+    }
+
     if (canvas.width !== targetW) canvas.width = targetW
     if (canvas.height !== targetH) canvas.height = targetH
+
+    setCanvasSize({ w: targetW, h: targetH })
   }
 
   function computeStats() {
@@ -403,18 +425,18 @@ export default function Measure() {
   }
 
   function buildLinePayload() {
-  if (!pixelPerMeter) return []
+    if (!pixelPerMeter) return []
 
-  return measurements.map((m, idx) => {
-    const label = m.label ?? labelFromIndex(idx)
-    const height_m = dist(m.p1, m.p2) / pixelPerMeter
-    return {
-      label,
-      height_m,      // ✅ snake_case sesuai API
-      ok: null as boolean | null, // inspector belum verifikasi, PJA yang isi
-    }
-  })
-}
+    return measurements.map((m, idx) => {
+      const label = m.label ?? labelFromIndex(idx)
+      const height_m = dist(m.p1, m.p2) / pixelPerMeter
+      return {
+        label,
+        height_m,      // ✅ snake_case sesuai API
+        ok: null as boolean | null, // inspector belum verifikasi, PJA yang isi
+      }
+    })
+  }
 
   async function canvasToFile(canvas: HTMLCanvasElement) {
     const blob: Blob = await new Promise((resolve, reject) => {
@@ -479,21 +501,21 @@ export default function Measure() {
   }
 
   async function saveInspectionLines(id: string) {
-  const lines = buildLinePayload()
-  if (!lines.length) throw new Error("Belum ada garis ukur untuk disimpan")
+    const lines = buildLinePayload()
+    if (!lines.length) throw new Error("Belum ada garis ukur untuk disimpan")
 
-  const r = await fetch(`${API_BASE}/api/inspection-lines`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      inspection_id: id,
-      lines, // [{label, height_m, ok}]
-    }),
-  })
+    const r = await fetch(`${API_BASE}/api/inspection-lines`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inspection_id: id,
+        lines, // [{label, height_m, ok}]
+      }),
+    })
 
-  if (!r.ok) throw new Error(await r.text())
-  return r.json()
-}
+    if (!r.ok) throw new Error(await r.text())
+    return r.json()
+  }
 
   // ======= Upload =======
   async function onPickFile(file?: File) {
@@ -750,7 +772,7 @@ export default function Measure() {
       }
 
       await uploadMeasure(id)
-await saveInspectionLines(id) // ✅ simpan per-titik
+      await saveInspectionLines(id)
 
       const stats = computeStats()
       setHint(
@@ -812,8 +834,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                   }}
                   placeholder="Masukkan nama inspector"
                   className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition ${formError && !inspectorName
-                      ? "border-red-500"
-                      : "border-buma-border focus:border-buma-green/60"
+                    ? "border-red-500"
+                    : "border-buma-border focus:border-buma-green/60"
                     } bg-white`}
                 />
               </div>
@@ -830,8 +852,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                   }}
                   placeholder="Contoh: Front 12-B Highwall"
                   className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition ${formError && !areaId
-                      ? "border-red-500"
-                      : "border-buma-border focus:border-buma-green/60"
+                    ? "border-red-500"
+                    : "border-buma-border focus:border-buma-green/60"
                     } bg-white`}
                 />
               </div>
@@ -849,8 +871,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                     setFormError(false)
                   }}
                   className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${formError && !shift
-                      ? "border-red-500"
-                      : "border-buma-border focus:border-buma-green/60"
+                    ? "border-red-500"
+                    : "border-buma-border focus:border-buma-green/60"
                     }`}
                 >
                   <option value="">Pilih shift</option>
@@ -872,8 +894,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                     setFormError(false)
                   }}
                   className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${formError && !shiftTime
-                      ? "border-red-500"
-                      : "border-buma-border focus:border-buma-green/60"
+                    ? "border-red-500"
+                    : "border-buma-border focus:border-buma-green/60"
                     }`}
                 >
                   <option value="">Pilih waktu inspeksi</option>
@@ -893,8 +915,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
 
               <button
                 className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold text-white shadow-soft transition-all duration-200 active:scale-95 ${isFormValid
-                    ? "bg-gradient-to-r from-[#15803D] to-[#22A745] hover:opacity-85"
-                    : "bg-gray-400 cursor-not-allowed"
+                  ? "bg-gradient-to-r from-[#15803D] to-[#22A745] hover:opacity-85"
+                  : "bg-gray-400 cursor-not-allowed"
                   }`}
                 type="button"
                 onClick={() => {
@@ -962,8 +984,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                       )
                     }}
                     className={`w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none transition ${!refSelected && calError
-                        ? "border-red-500"
-                        : "border-buma-border focus:border-buma-green/60"
+                      ? "border-red-500"
+                      : "border-buma-border focus:border-buma-green/60"
                       }`}
                   >
                     <option value="">— Pilih unit referensi —</option>
@@ -977,8 +999,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
 
               <button
                 className={`rounded-xl px-4 py-2.5 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${refSelected
-                    ? "bg-gradient-to-r from-[#2D5EFC] to-buma-blue text-white hover:opacity-85"
-                    : "bg-gray-200 text-gray-500"
+                  ? "bg-gradient-to-r from-[#2D5EFC] to-buma-blue text-white hover:opacity-85"
+                  : "bg-gray-200 text-gray-500"
                   }`}
                 type="button"
                 onClick={() => {
@@ -1048,8 +1070,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
               <div className="grid grid-cols-2 gap-2">
                 <button
                   className={`rounded-xl px-4 py-2.5 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${refSelected && pixelPerMeter
-                      ? "bg-gradient-to-r from-[#15803D] to-[#22A745] text-white hover:opacity-85"
-                      : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    ? "bg-gradient-to-r from-[#15803D] to-[#22A745] text-white hover:opacity-85"
+                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
                     }`}
                   type="button"
                   onClick={() => {
@@ -1057,7 +1079,7 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                       setMeasureError(true)
                       setHint(
                         !refSelected
-                          ? "Pilih unit referensi dulu (EX3600 / EX2500), lalu klik Set Points."
+                          ? "Pilih unit referensi dulu, lalu klik Set Points."
                           : "Kalibrasi dulu: klik Set Points lalu pilih 2 titik pada objek referensi."
                       )
                       return
@@ -1106,6 +1128,18 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                   tone={measurements.length > 0 ? "ok" : "warn"}
                 />
               </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <StatPill
+                  label="Last (m)"
+                  value={currentMeters != null ? currentMeters.toFixed(2) : "—"}
+                  tone={currentMeters != null ? "ok" : "info"}
+                />
+                <StatPill
+                  label="Angle (°)"
+                  value={currentDeg != null ? `${currentDeg.toFixed(1)}°` : "—"}
+                  tone={currentDeg != null ? "ok" : "info"}
+                />
+              </div>
             </div>
           </div>
         </aside>
@@ -1124,8 +1158,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                     <div className="relative inline-grid grid-cols-2 rounded-xl border border-buma-border bg-white shadow-soft p-[3px]">
                       <div
                         className={`pointer-events-none absolute top-[3px] left-[3px] h-[calc(100%-6px)] w-[calc(50%-3px)] rounded-lg transition-all duration-200 ${mode === "kalibrasi"
-                            ? "translate-x-0 bg-buma-blue"
-                            : "translate-x-full bg-buma-green"
+                          ? "translate-x-0 bg-buma-blue"
+                          : "translate-x-full bg-buma-green"
                           }`}
                       />
 
@@ -1137,8 +1171,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                           setHint("Mode Kalibrasi: klik 2 titik objek referensi.")
                         }}
                         className={`relative z-10 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-extrabold transition ${mode === "kalibrasi"
-                            ? "bg-gradient-to-r from-[#2D5EFC] to-buma-blue text-white"
-                            : "text-buma-text hover:bg-black/5"
+                          ? "bg-gradient-to-r from-[#2D5EFC] to-buma-blue text-white"
+                          : "text-buma-text hover:bg-black/5"
                           }`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
@@ -1159,8 +1193,8 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                           setHint("Mode Ukur: klik 2 titik untuk ukur jenjang.")
                         }}
                         className={`relative z-10 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-extrabold transition ${mode === "ukur"
-                            ? "bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
-                            : "text-buma-text hover:bg-black/5"
+                          ? "bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
+                          : "text-buma-text hover:bg-black/5"
                           } ${!pixelPerMeter ? "opacity-50 cursor-not-allowed hover:bg-transparent" : ""}`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
@@ -1190,21 +1224,26 @@ await saveInspectionLines(id) // ✅ simpan per-titik
                 </div>
 
                 <div className="relative w-full">
-                  <div className="relative h-[560px] w-full overflow-hidden rounded-xl border border-buma-border bg-white">
-                    <canvas
-                      ref={canvasRef}
-                      className="absolute inset-0 h-full w-full cursor-crosshair"
-                      style={{
-                        transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
-                        transformOrigin: "0 0",
-                        willChange: "transform",
-                      }}
-                      onMouseDown={onMouseDown}
-                      onMouseMove={onMouseMove}
-                      onMouseUp={onMouseUp}
-                      onMouseLeave={onMouseUp}
-                      onContextMenu={onContextMenu}
-                    />
+                  <div className="relative h-[560px] w-full overflow-auto rounded-xl border border-buma-border bg-white">
+                    <div
+                      className="relative"
+                      style={{ width: canvasSize.w, height: canvasSize.h }}
+                    >
+                      <canvas
+                        ref={canvasRef}
+                        className="absolute inset-0 cursor-crosshair"
+                        style={{
+                          transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+                          transformOrigin: "0 0",
+                          willChange: "transform",
+                        }}
+                        onMouseDown={onMouseDown}
+                        onMouseMove={onMouseMove}
+                        onMouseUp={onMouseUp}
+                        onMouseLeave={onMouseUp}
+                        onContextMenu={onContextMenu}
+                      />
+                    </div>
 
                     {!imgSrc ? (
                       <div className="pointer-events-none absolute inset-0 grid place-items-center">

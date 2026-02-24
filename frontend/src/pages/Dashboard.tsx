@@ -143,15 +143,6 @@ function pctOk(linesOkCount: number, linesCount: number) {
    Review detail fetchers
 ========================= */
 
-async function safeJson(res: Response) {
-  const txt = await res.text()
-  try {
-    return JSON.parse(txt)
-  } catch {
-    return null
-  }
-}
-
 async function fetchInspectionDetail(id: string, signal?: AbortSignal): Promise<any | null> {
   try {
     const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(id)}`, { signal })
