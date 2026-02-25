@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node"
 import formidable from "formidable"
 import type { Files, Fields, File as FormidableFile } from "formidable"
 import fs from "fs"
-import { supabaseAdmin } from "../../lib/supabaseAdmin"
+import { supabaseAdmin } from "../../lib/supabaseAdmin.js"
 
 export const config = {
   api: { bodyParser: false }, // wajib untuk multipart

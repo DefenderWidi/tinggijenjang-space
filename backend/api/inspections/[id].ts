@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
-import { supabaseAdmin } from "../../lib/supabaseAdmin"
+import { supabaseAdmin } from "../../lib/supabaseAdmin.js"
 
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || "*"

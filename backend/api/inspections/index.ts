@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
-import { supabaseAdmin } from "../_lib/supabaseAdmin"
+import { supabaseAdmin } from "../_lib/supabaseAdmin.js"
 
 // =====================
 // CORS
