@@ -25,9 +25,17 @@ function parseBody(req: VercelRequest) {
 }
 
 function getId(req: VercelRequest) {
-  const q = req.query.id
+  const q = (req.query as any)?.id
   const raw = Array.isArray(q) ? q[0] : q
   return String(raw ?? "").trim()
+}
+
+function toIntNonNeg(v: any): number | null {
+  const n = typeof v === "number" ? v : Number(v)
+  if (!Number.isFinite(n)) return null
+  const i = Math.floor(n)
+  if (i < 0) return 0
+  return i
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -51,10 +59,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "PATCH") {
-    const body = parseBody(req)
+    const body: any = parseBody(req)
     if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
 
-    // review_status hanya di-set kalau memang dikirim dan valid
+    // review_status hanya di-set kalau memang dikirim & valid
     const incomingStatus = body?.review_status
     const review_status: ReviewStatus | undefined =
       incomingStatus === "VALID" || incomingStatus === "REJECT" || incomingStatus === "PENDING"
@@ -64,9 +72,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const payload: Record<string, any> = {}
 
     if (review_status !== undefined) payload.review_status = review_status
-    if (body?.reviewed_by != null) payload.reviewed_by = body.reviewed_by ? String(body.reviewed_by) : null
-    if (body?.lines_ok_count != null) payload.lines_ok_count = Number(body.lines_ok_count)
-    if (body?.review_notes != null) payload.review_notes = String(body.review_notes)
+
+    // ✅ penting: pakai "in" supaya null tetap bisa mengosongkan field
+    if ("reviewed_by" in body) {
+      payload.reviewed_by = body.reviewed_by ? String(body.reviewed_by) : null
+    }
+
+    if ("review_notes" in body) {
+      const s = body.review_notes == null ? null : String(body.review_notes)
+      payload.review_notes = s && s.length > 1000 ? s.slice(0, 1000) : s
+    }
+
+    if ("lines_ok_count" in body) {
+      const v = toIntNonNeg(body.lines_ok_count)
+      if (v === null) return res.status(400).json({ error: "lines_ok_count must be a number" })
+      payload.lines_ok_count = v
+    }
+
+    // (opsional) kalau nanti mau update summary lain dari evaluator:
+    if ("lines_count" in body) {
+      const v = toIntNonNeg(body.lines_count)
+      if (v === null) return res.status(400).json({ error: "lines_count must be a number" })
+      payload.lines_count = v
+    }
+
+    // (opsional) max_height_m kalau dibutuhkan
+    if ("max_height_m" in body) {
+      const n = typeof body.max_height_m === "number" ? body.max_height_m : Number(body.max_height_m)
+      if (!Number.isFinite(n)) return res.status(400).json({ error: "max_height_m must be a number" })
+      payload.max_height_m = n
+    }
 
     if (Object.keys(payload).length === 0) {
       return res.status(400).json({ error: "No valid fields to update" })

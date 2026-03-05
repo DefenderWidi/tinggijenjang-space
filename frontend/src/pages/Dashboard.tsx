@@ -13,6 +13,8 @@ import {
   Pie,
   Cell,
 } from "recharts"
+import * as XLSX from "xlsx"
+import { getLimitM } from "../config/reference"
 
 type Shift = "SIANG" | "MALAM"
 type ReviewStatus = "PENDING" | "VALID" | "REJECT"
@@ -31,6 +33,8 @@ type InspectionRow = {
   maxHeightM: number
   reviewedBy: string | null
   reviewStatus: ReviewStatus
+  refUnit?: string | null
+refMeter?: number | null
 }
 
 type ReviewLine = {
@@ -54,7 +58,7 @@ function cls(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ")
 }
 
-function mapInspection(r: any): InspectionRow {89
+function mapInspection(r: any): InspectionRow {
   return {
     id: String(r.id ?? ""),
     inspectedAt: String(r.inspected_at ?? r.inspectedAt ?? ""),
@@ -71,6 +75,8 @@ function mapInspection(r: any): InspectionRow {89
       : r.reviewStatus === "VALID" || r.reviewStatus === "REJECT" || r.reviewStatus === "PENDING"
         ? r.reviewStatus
         : "PENDING") as ReviewStatus,
+    refUnit: r.ref_unit ?? r.refUnit ?? null,
+    refMeter: r.ref_meter ?? r.refMeter ?? null,
   }
 }
 
@@ -137,6 +143,11 @@ function fakeWeekLabel(dateStr: string) {
 function pctOk(linesOkCount: number, linesCount: number) {
   if (!linesCount || linesCount <= 0) return 0
   return Math.round((linesOkCount / linesCount) * 100)
+}
+
+function fmtSigned(x: number) {
+  const s = (Number.isFinite(x) ? x : 0).toFixed(2)
+  return x > 0 ? `+${s} m` : `${s} m`
 }
 
 /* =========================
@@ -410,10 +421,20 @@ function DetailTable({
   mode,
   rows,
   onOpenReview,
+
+  onExportExcel,
+  exportDisabled,
+  exportBusy,
+  exportMsg,
 }: {
   mode: "DAILY" | "WEEKLY"
   rows: InspectionRow[]
   onOpenReview: (r: InspectionRow) => void
+
+  onExportExcel: () => void
+  exportDisabled: boolean
+  exportBusy: boolean
+  exportMsg?: string
 }) {
   return (
     <div className="rounded-3xl border border-buma-border bg-white shadow-soft">
@@ -421,7 +442,9 @@ function DetailTable({
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">Detail Operasional</div>
+              <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">
+                Detail Operasional
+              </div>
               <span className="inline-flex rounded-full border border-buma-border bg-buma-bg px-2.5 py-1 text-[11px] font-extrabold text-buma-muted">
                 {mode === "DAILY" ? "Daily View" : "Weekly View"}
               </span>
@@ -431,8 +454,30 @@ function DetailTable({
             </div>
           </div>
 
-          <div className="text-xs text-buma-muted">
-            Total inspeksi: <b className="text-buma-text">{rows.length}</b>
+          {/* RIGHT TOP: Export + total */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onExportExcel}
+              disabled={exportDisabled || exportBusy}
+              className={cls(
+                "inline-flex items-center justify-center gap-2 rounded-xl border border-buma-border bg-white px-3 py-2",
+                "text-xs font-extrabold text-buma-text shadow-sm transition hover:bg-black/5",
+                "disabled:opacity-50"
+              )}
+              title={exportDisabled ? "Tidak ada data untuk diexport" : "Export Excel sesuai view saat ini"}
+            >
+              <span className="text-sm leading-none">⤓</span>
+              {exportBusy ? "Export..." : "Export Excel"}
+            </button>
+
+            <div className="text-xs text-buma-muted">
+              Total inspeksi: <b className="text-buma-text">{rows.length}</b>
+            </div>
+
+            {exportBusy && exportMsg ? (
+              <div className="w-full text-right text-[11px] text-buma-muted">{exportMsg}</div>
+            ) : null}
           </div>
         </div>
 
@@ -489,7 +534,7 @@ function DetailTable({
                       <td className="py-3">{r.inspector}</td>
                       <td className="py-3 text-buma-muted">{shiftLabel(r.shift)}</td>
 
-                      <td className="py-3 text-buma-muted">{pelaksanaanLabel(r.pelaksanaan)}</td>
+                      <td className="py-3 text-buma-muted">{r.pelaksanaan}</td>
                       <td className="py-3 text-buma-muted">{r.front}</td>
 
                       <td className="py-3">
@@ -638,8 +683,12 @@ function ReviewDetailModal({
   }, [open, row])
 
   if (!open || !row) return null
-
+  // ✅ active dulu
   const active = detail?.inspection ?? row
+
+  // ✅ baru standardM
+  const standardM = getLimitM(active.refUnit ?? null)
+
   const { date, time } = formatDateTime(active.inspectedAt)
 
   const isReviewed = active.reviewStatus !== "PENDING" && !!active.reviewedBy
@@ -742,6 +791,8 @@ function ReviewDetailModal({
                   <MetaCard k="Max Height" v={`${Number(active.maxHeightM || 0).toFixed(2)} m`} />
                   <MetaCard k="Lines" v={`${active.linesCount}`} />
                   <MetaCard k="Reviewer" v={active.reviewedBy ?? "—"} />
+                  <MetaCard k="Ref Unit" v={active.refUnit ?? "—"} />
+<MetaCard k="Limit" v={`${standardM.toFixed(2)} m`} />
 
                   {/* STATUS: jadi badge kecil (bukan card besar) */}
                   <div className="rounded-2xl border border-buma-border bg-white p-3 text-xs">
@@ -768,82 +819,131 @@ function ReviewDetailModal({
                 </div>
               </div>
 
-              {/* RIGHT */}
-              <div className="space-y-3">
-                <div className="rounded-2xl border border-buma-border bg-white p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-extrabold text-buma-text">Verifikasi Tiap Titik</div>
-                      <div className="mt-1 text-xs text-buma-muted">View-only hasil verifikasi dari PJA.</div>
-                    </div>
+             {/* RIGHT */}
+<div className="space-y-3">
+  {/* Card Verifikasi (PJA-like, view-only) */}
+  <div className="rounded-2xl border border-buma-border bg-white p-4">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <div className="text-sm font-extrabold text-buma-text">Verifikasi Tiap Titik</div>
+        <div className="mt-1 text-xs text-buma-muted">
+          View-only hasil verifikasi dari PJA. Selisih = Actual − Standar.
+        </div>
+      </div>
 
-                    {/* badge kecil juga */}
-                    <span className={cls("shrink-0 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-extrabold", statusBadgeCls)}>
-                      {active.reviewStatus}
+      <div className="shrink-0 rounded-2xl border border-buma-border bg-buma-bg px-3 py-2 text-xs font-extrabold text-buma-muted">
+        Limit {standardM.toFixed(1)} m
+      </div>
+    </div>
+
+    <div className="mt-3 space-y-2">
+      {loading ? (
+        <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-xs text-buma-muted">
+          Loading verifikasi…
+        </div>
+      ) : detail?.lines && detail.lines.length ? (
+        detail.lines.map((ln) => {
+          const v = ln.ok
+
+          const actual = Number.isFinite(ln.heightM) ? ln.heightM : null
+          const delta = actual == null ? null : actual - standardM
+
+          return (
+            <div key={ln.label} className="rounded-2xl border border-buma-border bg-buma-bg p-3">
+              {/* Row atas */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-semibold text-buma-muted leading-none">titik</span>
+                    <span className="mt-1 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-buma-border bg-white text-sm font-extrabold text-buma-text">
+                      {ln.label}
                     </span>
                   </div>
 
-                  <div className="mt-3 space-y-2">
-                    {loading ? (
-                      <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-xs text-buma-muted">
-                        Loading verifikasi…
-                      </div>
-                    ) : detail?.lines && detail.lines.length ? (
-                      detail.lines.map((ln) => {
-                        const v = ln.ok
-                        return (
-                          <div key={ln.label} className="rounded-2xl border border-buma-border bg-buma-bg p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="flex flex-col items-center">
-                                  <span className="text-[10px] font-semibold text-buma-muted leading-none">titik</span>
-                                  <span className="mt-1 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-buma-border bg-white text-sm font-extrabold text-buma-text">
-                                    {ln.label}
-                                  </span>
-                                </div>
-
-                                <div className="min-w-0">
-                                  <div className="text-[11px] font-semibold text-buma-muted">Tinggi</div>
-                                  <div className="mt-0.5 text-sm font-extrabold text-buma-text">
-                                    {Number.isFinite(ln.heightM) ? ln.heightM.toFixed(2) : "0.00"} m
-                                  </div>
-                                </div>
-                              </div>
-
-                              <span
-                                className={cls(
-                                  "shrink-0 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-extrabold",
-                                  v === null
-                                    ? "border-buma-border bg-white text-buma-muted"
-                                    : v
-                                      ? "border-buma-blue/30 bg-buma-blue/10 text-buma-blue"
-                                      : "border-red-500/30 bg-red-500/10 text-red-600"
-                                )}
-                              >
-                                {v === null ? "Tidak ada data" : v ? "Sesuai" : "Tidak sesuai"}
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-xs text-buma-muted">
-                        Data verifikasi per titik belum tersedia.
-                      </div>
-                    )}
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-buma-muted">Tinggi</div>
+                    <div className="mt-0.5 text-sm font-extrabold text-buma-text">
+                      {actual == null ? "—" : `${actual.toFixed(2)} m`}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-buma-border bg-white p-4">
-                  <div className="text-sm font-extrabold text-buma-text">Catatan PJA</div>
+                <span
+                  className={cls(
+                    "shrink-0 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-extrabold",
+                    v === null
+                      ? "border-buma-border bg-white text-buma-muted"
+                      : v
+                        ? "border-buma-blue/30 bg-buma-blue/10 text-buma-blue"
+                        : "border-red-500/30 bg-red-500/10 text-red-600"
+                  )}
+                >
+                  {v === null ? "Tidak ada data" : v ? "Sesuai" : "Tidak sesuai"}
+                </span>
+              </div>
 
-                  <div className="mt-3 rounded-2xl border border-buma-border bg-buma-bg px-3 py-2 text-sm text-buma-text whitespace-pre-wrap">
-                    {detail?.notes ? detail.notes : "— Tidak ada catatan / belum tersedia —"}
+              {/* Panel per titik: Standar / Actual / Selisih */}
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
+                  <div className="text-buma-muted">Standar</div>
+                  <div className="font-extrabold text-buma-text">{standardM.toFixed(2)} m</div>
+                </div>
+
+                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
+                  <div className="text-buma-muted">Actual</div>
+                  <div className="font-extrabold text-buma-text">
+                    {actual == null ? "—" : `${actual.toFixed(2)} m`}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
+                  <div className="text-buma-muted">Selisih</div>
+                  <div
+                    className={cls(
+                      "font-extrabold",
+                      delta == null ? "text-buma-muted" : delta > 0 ? "text-red-600" : "text-buma-green"
+                    )}
+                  >
+                    {delta == null ? "—" : fmtSigned(delta)}
                   </div>
                 </div>
               </div>
+
+              <div className="mt-2 text-[11px] text-buma-muted">
+                {delta == null ? (
+                  <>*Selisih tidak tersedia karena data tinggi belum lengkap.</>
+                ) : delta > 0 ? (
+                  <>
+                    *Actual <b className="text-buma-text">melebihi</b> limit ({fmtSigned(delta)}).
+                  </>
+                ) : (
+                  <>
+                    *Actual <b className="text-buma-text">di bawah</b> limit ({fmtSigned(delta)}).
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          )
+        })
+      ) : (
+        <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-xs text-buma-muted">
+          Data verifikasi per titik belum tersedia.
+        </div>
+      )}
+    </div>
+  </div>
+
+  {/* Card Catatan */}
+  <div className="rounded-2xl border border-buma-border bg-white p-4">
+    <div className="text-sm font-extrabold text-buma-text">Catatan PJA</div>
+
+    <div className="mt-3 rounded-2xl border border-buma-border bg-buma-bg px-3 py-2 text-sm text-buma-text whitespace-pre-wrap">
+      {detail?.notes ? detail.notes : "— Tidak ada catatan / belum tersedia —"}
+    </div>
+  </div>
+</div>
+</div>
+</div>
 
           {/* ===== footer (tanpa tombol, biar ga dobel) ===== */}
           <div className="sticky bottom-0 z-10 border-t border-buma-border bg-white/95 px-4 py-3 md:px-5">
@@ -972,6 +1072,116 @@ export default function Dashboard() {
   }, [inspections])
 
   const isEmptyReviewed = inspectionsReviewed.length === 0
+
+  // ===== EXPORT (Excel) =====
+const [isExporting, setIsExporting] = useState(false)
+const [exportMsg, setExportMsg] = useState("")
+
+function safeFilename(s: string) {
+  return (s || "").replace(/[^\w\-]+/g, "_").slice(0, 80)
+}
+
+// ambil raw lines dari backend per inspection
+async function fetchLinesRaw(
+  inspectionId: string
+): Promise<Array<{ label: string; height_m: number | null; ok: boolean | null }>> {
+  try {
+    const r = await fetch(
+      `${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(inspectionId)}`,
+      { method: "GET" }
+    )
+    if (!r.ok) return []
+    const j = await r.json()
+    const arr = Array.isArray(j?.data) ? j.data : []
+    return arr
+      .map((x: any) => ({
+        label: String(x.label ?? "").trim(),
+        height_m: x.height_m == null ? null : Number(x.height_m),
+        ok: x.ok === true ? true : x.ok === false ? false : null,
+      }))
+      .filter((x: any) => x.label)
+  } catch {
+    return []
+  }
+}
+
+async function exportExcelCurrentView() {
+  if (isExporting) return
+  if (!inspections.length) return
+
+  try {
+    setIsExporting(true)
+    setExportMsg("Menyiapkan data export...")
+
+    // ===== Sheet 1: Inspections (summary) =====
+    const inspectionsSheet = inspections.map((x) => {
+      const { date, time } = formatDateTime(x.inspectedAt)
+      return {
+        inspection_id: x.id,
+        tanggal: date,
+        waktu: mode === "DAILY" ? time : "—",
+        inspector: x.inspector,
+        shift: x.shift,
+        pelaksanaan: x.pelaksanaan,
+        front: x.front,
+        max_height_m: x.maxHeightM,
+        lines_count: x.linesCount,
+        lines_ok_count: x.linesOkCount,
+        review_status: x.reviewStatus,
+        reviewed_by: x.reviewedBy ?? "",
+      }
+    })
+
+    // ===== Sheet 2: Lines (per titik) =====
+    const allLines: Array<any> = []
+    const batchSize = 10
+
+    for (let i = 0; i < inspections.length; i += batchSize) {
+      const batch = inspections.slice(i, i + batchSize)
+      setExportMsg(`Ambil detail titik... ${Math.min(i + batchSize, inspections.length)}/${inspections.length}`)
+
+      const res = await Promise.all(
+        batch.map(async (x) => {
+          const linesRaw = await fetchLinesRaw(x.id)
+          if (!linesRaw.length) {
+            return [{ inspection_id: x.id, label: "", height_m: "", ok: "" }]
+          }
+          return linesRaw.map((ln) => ({
+            inspection_id: x.id,
+            label: ln.label,
+            height_m: ln.height_m ?? "",
+            ok: ln.ok === true ? "TRUE" : ln.ok === false ? "FALSE" : "",
+          }))
+        })
+      )
+
+      res.flat().forEach((row) => allLines.push(row))
+    }
+
+    // ===== Build workbook =====
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(inspectionsSheet), "Inspections")
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(allLines.length ? allLines : [{ inspection_id: "" }]),
+      "Lines"
+    )
+
+    // ===== filename: sesuai mode & filter =====
+    const period =
+      mode === "DAILY"
+        ? `${fromDate || "NA"}_to_${toDate || "NA"}`
+        : `${month || "NA"}`
+    const fname = `Dashboard_Export_${safeFilename(mode)}_${safeFilename(period)}_${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`
+
+    XLSX.writeFile(wb, fname)
+  } finally {
+    setIsExporting(false)
+    setExportMsg("")
+  }
+}
 
   const compliance = useMemo(() => {
     const ok = inspectionsReviewed.reduce((s, x) => s + (x.linesOkCount ?? 0), 0)
@@ -1163,7 +1373,15 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-4">
-            <DetailTable mode={mode} rows={inspections} onOpenReview={openReview} />
+           <DetailTable
+  mode={mode}
+  rows={inspections}
+  onOpenReview={openReview}
+onExportExcel={exportExcelCurrentView}
+  exportDisabled={loading || inspections.length === 0}
+  exportBusy={isExporting}
+  exportMsg={exportMsg}
+/>
           </div>
         </>
       )}

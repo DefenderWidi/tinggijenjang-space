@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import AppLayout from "../layouts/AppLayout"
+import BumaLoader from "../components/BumaLoader"
+import BumaCheck from "../components/BumaCheck"
+import BumaCross from "../components/BumaCross"
+import { getLimitM } from "../config/reference"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 const LS_KEY = "mt_session_v1"
-const LIMIT_M = 8.0
 
 type Shift = "DAY" | "NIGHT"
 type Pelaksanaan = "START" | "MID" | "END"
@@ -23,6 +26,8 @@ type InspectionRow = {
   reviewStatus: ReviewStatus
   reviewedBy: string | null
   reviewNotes?: string | null
+  ref_unit?: string | null
+  ref_meter?: number | null
 }
 
 type MeasureRow = {
@@ -76,6 +81,12 @@ function fmtDateTime(iso: string) {
   const date = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
   return { date, time }
+}
+
+function fmtSigned(x: number) {
+  const v = Number.isFinite(x) ? x : 0
+  const sign = v > 0 ? "+" : ""
+  return `${sign}${v.toFixed(2)} m`
 }
 
 function pillReview(review: ReviewStatus) {
@@ -153,6 +164,62 @@ function MetaMini({ k, v }: { k: string; v: string }) {
   )
 }
 
+function SubmitResultCard({
+  variant,
+  title,
+  desc,
+  onClose,
+  onRetry,
+  icon,
+}: {
+  variant: "success" | "error"
+  title: string
+  desc?: string
+  onClose: () => void
+  onRetry?: () => void
+  icon?: React.ReactNode
+}) {
+  const ok = variant === "success"
+
+  return (
+    <div className="flex w-full max-w-[340px] flex-col items-center justify-center gap-3 text-center sm:max-w-[380px]">
+      <div className="grid h-16 w-16 place-items-center sm:h-20 sm:w-20">
+        {icon ? icon : ok ? <BumaCheck size="md" /> : <BumaCross size="md" />}
+      </div>
+
+      <div className="text-sm font-extrabold tracking-wide text-buma-text sm:text-[15px]">
+        {title}
+      </div>
+
+      {desc ? (
+        <div className="text-xs leading-relaxed text-buma-muted sm:text-sm">
+          {desc}
+        </div>
+      ) : null}
+
+      <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+        {onRetry ? (
+          <button
+            type="button"
+            className="rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2 text-xs font-extrabold text-white shadow-soft transition active:scale-95 hover:opacity-85"
+            onClick={onRetry}
+          >
+            Coba Lagi
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          className="rounded-xl border border-buma-border bg-white px-4 py-2 text-xs font-extrabold text-buma-text shadow-soft transition active:scale-95 hover:bg-black/5"
+          onClick={onClose}
+        >
+          Tutup
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function PjaDashboard() {
   const session = getSession()
   const pjaName = session?.username ? session.username : "PJA"
@@ -185,6 +252,12 @@ export default function PjaDashboard() {
   const [lines, setLines] = useState<LineItem[]>([])
   const [lineVerify, setLineVerify] = useState<Record<string, boolean | null>>({})
 
+  // submit state (kirim verifikasi)
+  type SubmitStatus = "idle" | "loading" | "success" | "error"
+  const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle")
+  const [submitMsg, setSubmitMsg] = useState<string>("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   // ===== fetch inspections =====
   async function fetchInspections() {
     setLoading(true)
@@ -212,6 +285,8 @@ export default function PjaDashboard() {
           : "PENDING") as ReviewStatus,
         reviewedBy: x.reviewed_by ? String(x.reviewed_by) : null,
         reviewNotes: x.review_notes ?? null,
+        ref_unit: x.ref_unit ?? null,
+        ref_meter: x.ref_meter ?? null,
       }))
 
       setRows(mapped)
@@ -338,6 +413,12 @@ export default function PjaDashboard() {
     setNotes(item.reviewNotes ?? "")
     setImgOpen(false)
 
+    setMeasureMeta((prev) => ({
+      ...(prev ?? {}),
+      ref_unit: item.ref_unit ?? prev?.ref_unit ?? null,
+      ref_meter: item.ref_meter ?? prev?.ref_meter ?? null,
+    }))
+
     const linesFromMeasure = await fetchLatestMeasure(item.id)
     const loadedLines = linesFromMeasure ?? (await fetchLinesForInspection(item.id, item.linesCount))
 
@@ -353,52 +434,103 @@ export default function PjaDashboard() {
     return lines.every((ln) => lineVerify[ln.label] !== null && lineVerify[ln.label] !== undefined)
   }, [lines, lineVerify])
 
- async function send() {
-  if (!active) return
-  if (!allVerified) return
+  // standar = limit berdasarkan unit (sementara return 8 untuk semua)
+  const standardM = useMemo(() => {
+    return getLimitM(measureMeta?.ref_unit ?? null)
+  }, [measureMeta?.ref_unit])
 
-  try {
-    // 1) SIMPAN PER-TITIK ke inspection_lines (INI YANG BIKIN EVALUATOR BISA LIAT)
-    const payloadLines = lines.map((ln) => ({
-      label: ln.label,
-      height_m: ln.heightM ?? 0,                 // kalau height null, tetap kirim 0 (atau boleh null kalau kolomnya allow null)
-      ok: lineVerify[ln.label] ?? null,          // harusnya sudah true/false semua karena allVerified
-    }))
+  async function send() {
+    if (!active) return
+    if (!allVerified) return
+    if (isSubmitting) return
 
-    const rLines = await fetch(`${API_BASE}/api/inspection-lines`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inspection_id: active.id,
-        lines: payloadLines,
-      }),
-    })
-    if (!rLines.ok) throw new Error(await rLines.text())
+    try {
+      setIsSubmitting(true)
+      setSubmitStatus("loading")
+      setSubmitMsg("Mengirim verifikasi & menyimpan hasil...")
 
-    // 2) UPDATE SUMMARY di inspections supaya dashboard evaluator (chart/summary) tetap jalan
-    const okCount = Object.values(lineVerify).filter((v) => v === true).length
+      // 1) SIMPAN PER-TITIK
+      const payloadLines = lines.map((ln) => ({
+        label: ln.label,
+        height_m: ln.heightM ?? 0,
+        ok: lineVerify[ln.label] ?? null,
+      }))
 
-    const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        review_status: "VALID",
-        reviewed_by: pjaName,
-        review_notes: notes || null,
-        lines_ok_count: okCount,
-      }),
-    })
-    if (!r.ok) throw new Error(await r.text())
+      const rLines = await fetch(`${API_BASE}/api/inspection-lines`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inspection_id: active.id,
+          lines: payloadLines,
+        }),
+      })
+      if (!rLines.ok) throw new Error(await rLines.text())
 
-    await fetchInspections()
-    closeDetail()
-  } catch (e: any) {
-    alert(`Gagal kirim verifikasi: ${e?.message ?? "unknown error"}`)
+      // 2) UPDATE SUMMARY INSPECTIONS
+      const okCount = Object.values(lineVerify).filter((v) => v === true).length
+
+      const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          review_status: "VALID",
+          reviewed_by: pjaName,
+          review_notes: notes || null,
+          lines_ok_count: okCount,
+        }),
+      })
+      if (!r.ok) throw new Error(await r.text())
+
+      setSubmitStatus("success")
+      setSubmitMsg("Verifikasi berhasil dikirim.")
+
+      await fetchInspections()
+
+      setTimeout(() => {
+        setSubmitStatus("idle")
+        closeDetail()
+      }, 2000)
+    } catch (e: any) {
+      setSubmitStatus("error")
+      setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
-}
 
   return (
+
     <AppLayout>
+      {submitStatus !== "idle" && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" />
+
+          <div className="relative mx-4 w-[min(92vw,420px)] rounded-2xl border border-buma-border bg-white p-6 shadow-2xl">
+            {submitStatus === "loading" ? (
+              <BumaLoader />
+            ) : submitStatus === "success" ? (
+              <SubmitResultCard
+                variant="success"
+                title="Tersimpan"
+                desc={submitMsg || "Verifikasi berhasil dikirim."}
+                onClose={() => setSubmitStatus("idle")}
+              />
+            ) : (
+              <SubmitResultCard
+                variant="error"
+                title="Gagal"
+                desc={submitMsg || "Terjadi kendala. Silakan coba lagi."}
+                onClose={() => setSubmitStatus("idle")}
+                onRetry={() => {
+                  setSubmitStatus("loading")
+                  setSubmitMsg("Mencoba ulang mengirim verifikasi...")
+                  void send()
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
       <div className="space-y-4">
         {/* ===== HERO ===== */}
         <div className="relative overflow-hidden rounded-3xl border border-buma-border bg-white shadow-soft">
@@ -430,7 +562,7 @@ export default function PjaDashboard() {
                 Reject: {counts.REJECT}
               </span>
               <span className="ml-auto rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-extrabold text-white/85 backdrop-blur">
-                Limit referensi: {LIMIT_M.toFixed(1)} m
+                Limit referensi: {standardM.toFixed(1)} m
               </span>
             </div>
           </div>
@@ -492,18 +624,22 @@ export default function PjaDashboard() {
         {/* ===== TABLE ===== */}
         <div className="rounded-3xl border border-buma-border bg-white shadow-soft min-w-0">
           <div className="px-4 pt-4">
-            <div className="text-sm font-extrabold text-buma-text">Daftar Inspeksi</div>
-            <div className="mt-1 text-xs text-buma-muted">
-              Data berasal dari <b>Supabase (inspections)</b>. Klik <b>Detail</b> untuk lihat foto overlay dan verifikasi.
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-extrabold text-buma-text">Daftar Inspeksi</div>
+                <div className="mt-1 text-xs text-buma-muted">
+                  Data berasal dari <b>Supabase (inspections)</b>. Klik <b>Detail</b> untuk lihat foto overlay dan verifikasi.
+                </div>
+              </div>
             </div>
           </div>
 
-        <div
-  className="mt-3 overflow-x-auto px-4 pb-2
+          <div
+            className="mt-3 overflow-x-auto px-4 pb-2
              [-webkit-overflow-scrolling:touch]
              overscroll-x-contain"
->
-  <table className="w-full min-w-[980px] text-sm text-buma-text">
+          >
+            <table className="w-full min-w-[980px] text-sm text-buma-text">
               <thead>
                 <tr className="border-y border-buma-border text-left text-buma-muted">
                   <th className="px-4 py-3">Tanggal</th>
@@ -530,7 +666,8 @@ export default function PjaDashboard() {
                   <>
                     {filtered.map((x) => {
                       const { date, time } = fmtDateTime(x.inspectedAt)
-                      const danger = x.maxHeightM > LIMIT_M
+                      const limitRow = getLimitM(x.ref_unit ?? null)
+                      const danger = x.maxHeightM > limitRow
                       return (
                         <tr key={x.id} className="border-b border-buma-border hover:bg-black/5">
                           <td className="px-4 py-3 font-semibold">{date}</td>
@@ -566,33 +703,33 @@ export default function PjaDashboard() {
                           </td>
 
                           <td className="px-4 py-3 text-right">
-                        <button
-  type="button"
-  onClick={() => void openDetail(x)}
-  className="inline-flex items-center gap-1.5 rounded-xl
-             border border-buma-border
-             bg-gradient-to-r from-black/5 to-transparent
-             px-3 py-2 text-xs font-extrabold text-buma-text
-             shadow-sm transition-all duration-200
-             hover:border-black/30
-             hover:bg-gradient-to-r hover:from-black/8 hover:to-transparent
-             hover:shadow-md"
-  title="Lihat detail inspeksi untuk verifikasi"
->
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="16"
-    height="16"
-    viewBox="0 0 20 20"
-    className="opacity-80"
-  >
-    <path
-      fill="currentColor"
-      d="M6.25 4.5A1.75 1.75 0 0 0 4.5 6.25v7.5c0 .966.784 1.75 1.75 1.75h7.5a1.75 1.75 0 0 0 1.75-1.75v-2a.75.75 0 0 1 1.5 0v2A3.25 3.25 0 0 1 13.75 17h-7.5A3.25 3.25 0 0 1 3 13.75v-7.5A3.25 3.25 0 0 1 6.25 3h2a.75.75 0 0 1 0 1.5zm4.25-.75a.75.75 0 0 1 .75-.75h5a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0V5.56l-3.72 3.72a.75.75 0 1 1-1.06-1.06l3.72-3.72h-3.19a.75.75 0 0 1-.75-.75"
-    />
-  </svg>
-  Detail
-</button>
+                            <button
+                              type="button"
+                              onClick={() => void openDetail(x)}
+                              className="inline-flex items-center gap-1.5 rounded-xl
+                                border border-buma-border
+                                bg-gradient-to-r from-black/5 to-transparent
+                                px-3 py-2 text-xs font-extrabold text-buma-text
+                                shadow-sm transition-all duration-200
+                                hover:border-black/30
+                                hover:bg-gradient-to-r hover:from-black/8 hover:to-transparent
+                                hover:shadow-md"
+                              title="Lihat detail inspeksi untuk verifikasi"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 20 20"
+                                className="opacity-80"
+                              >
+                                <path
+                                  fill="currentColor"
+                                  d="M6.25 4.5A1.75 1.75 0 0 0 4.5 6.25v7.5c0 .966.784 1.75 1.75 1.75h7.5a1.75 1.75 0 0 0 1.75-1.75v-2a.75.75 0 0 1 1.5 0v2A3.25 3.25 0 0 1 13.75 17h-7.5A3.25 3.25 0 0 1 3 13.75v-7.5A3.25 3.25 0 0 1 6.25 3h2a.75.75 0 0 1 0 1.5zm4.25-.75a.75.75 0 0 1 .75-.75h5a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0V5.56l-3.72 3.72a.75.75 0 1 1-1.06-1.06l3.72-3.72h-3.19a.75.75 0 0 1-.75-.75"
+                                />
+                              </svg>
+                              Detail
+                            </button>
                           </td>
                         </tr>
                       )
@@ -641,7 +778,6 @@ export default function PjaDashboard() {
                       {fmtDateTime(active.inspectedAt).date} {fmtDateTime(active.inspectedAt).time} • {active.inspector}
                     </div>
                   </div>
-
                   <button
                     type="button"
                     onClick={closeDetail}
@@ -720,6 +856,7 @@ export default function PjaDashboard() {
 
                   {/* RIGHT */}
                   <div className="space-y-3">
+                    {/* Card Verifikasi */}
                     <div className="rounded-2xl border border-buma-border bg-white p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -727,13 +864,16 @@ export default function PjaDashboard() {
                           <div className="mt-1 text-xs text-buma-muted">Pilih status tiap titik (A/B/C/…).</div>
                         </div>
                         <div className="shrink-0 rounded-2xl border border-buma-border bg-buma-bg px-3 py-2 text-xs font-extrabold text-buma-muted">
-                          Limit {LIMIT_M.toFixed(1)} m
+                          Limit {standardM.toFixed(1)} m
                         </div>
                       </div>
 
                       <div className="mt-3 space-y-2">
                         {lines.map((ln) => {
                           const v = lineVerify[ln.label] ?? null
+
+                          const actual = ln.heightM
+                          const delta = actual == null ? null : actual - standardM
 
                           const toggleVal = (next: boolean) => {
                             setLineVerify((prev) => {
@@ -744,6 +884,7 @@ export default function PjaDashboard() {
 
                           return (
                             <div key={ln.label} className="rounded-2xl border border-buma-border bg-buma-bg p-3">
+                              {/* Row atas */}
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-center gap-3 min-w-0">
                                   <div className="flex flex-col items-center">
@@ -767,14 +908,42 @@ export default function PjaDashboard() {
                                     v === null
                                       ? "border-buma-border bg-white text-buma-muted"
                                       : v
-                                      ? "border-buma-blue/30 bg-buma-blue/10 text-buma-blue"
-                                      : "border-red-500/30 bg-red-500/10 text-red-600"
+                                        ? "border-buma-blue/30 bg-buma-blue/10 text-buma-blue"
+                                        : "border-red-500/30 bg-red-500/10 text-red-600"
                                   )}
                                 >
                                   {v === null ? "Belum Diverifikasi" : v ? "Sesuai" : "Tidak sesuai"}
                                 </span>
                               </div>
 
+                              {/* Panel per titik */}
+                              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
+                                  <div className="text-buma-muted">Standar</div>
+                                  <div className="font-extrabold text-buma-text">{standardM.toFixed(2)} m</div>
+                                </div>
+
+                                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
+                                  <div className="text-buma-muted">Actual</div>
+                                  <div className="font-extrabold text-buma-text">
+                                    {actual == null ? "—" : `${actual.toFixed(2)} m`}
+                                  </div>
+                                </div>
+
+                                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
+                                  <div className="text-buma-muted">Selisih</div>
+                                  <div
+                                    className={cls(
+                                      "font-extrabold",
+                                      delta == null ? "text-buma-muted" : delta > 0 ? "text-red-600" : "text-buma-green"
+                                    )}
+                                  >
+                                    {delta == null ? "—" : fmtSigned(delta)}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Buttons */}
                               <div className="mt-3 grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
@@ -830,6 +999,7 @@ export default function PjaDashboard() {
                       </div>
                     </div>
 
+                    {/* Card Catatan */}
                     <div className="rounded-2xl border border-buma-border bg-white p-4">
                       <div className="text-sm font-extrabold text-buma-text">Catatan</div>
                       <div className="mt-1 text-xs text-buma-muted">Opsional.</div>
@@ -860,12 +1030,18 @@ export default function PjaDashboard() {
 
                   <button
                     type="button"
-                    disabled={!allVerified}
-                    onClick={send}
+                    disabled={!allVerified || isSubmitting || submitStatus === "loading"}
+                    onClick={() => void send()}
                     className="rounded-xl bg-gradient-to-r from-[#2D5EFC] to-buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-40"
-                    title={!allVerified ? "Semua titik harus diverifikasi (Sesuai / Tidak sesuai)" : "Kirim verifikasi"}
+                    title={
+                      !allVerified
+                        ? "Semua titik harus diverifikasi (Sesuai / Tidak sesuai)"
+                        : isSubmitting
+                          ? "Mengirim..."
+                          : "Kirim verifikasi"
+                    }
                   >
-                    Kirim
+                    {isSubmitting ? "Mengirim..." : "Kirim"}
                   </button>
                 </div>
 

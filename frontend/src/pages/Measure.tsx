@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import AppLayout from "../layouts/AppLayout"
+import BumaLoader from "../components/BumaLoader"
+import BumaCheck from "../components/BumaCheck"
+import BumaCross from "../components/BumaCross"
+import { REF_PRESET_M, type RefKey, getLimitM } from "../config/reference"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 
@@ -73,12 +77,67 @@ function IconButton({
   )
 }
 
+function SubmitResultCard({
+  variant,
+  title,
+  desc,
+  onClose,
+  onRetry,
+  icon,
+}: {
+  variant: "success" | "error"
+  title: string
+  desc?: string
+  onClose: () => void
+  onRetry?: () => void
+  icon?: React.ReactNode
+}) {
+  const ok = variant === "success"
+
+  return (
+    <div className="flex w-full max-w-[340px] flex-col items-center justify-center gap-3 text-center sm:max-w-[380px]">
+<div className="grid h-16 w-16 place-items-center sm:h-20 sm:w-20">
+  {icon ? icon : ok ? <BumaCheck size="md" /> : <BumaCross size="md" />}
+</div>
+
+      <div className="text-sm font-extrabold tracking-wide text-buma-text sm:text-[15px]">
+        {title}
+      </div>
+
+      {desc ? (
+        <div className="text-xs leading-relaxed text-buma-muted sm:text-sm">
+          {desc}
+        </div>
+      ) : null}
+
+<div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+  {onRetry ? (
+    <button
+      type="button"
+      className="rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2 text-xs font-extrabold text-white shadow-soft transition active:scale-95 hover:opacity-85"
+      onClick={onRetry}
+    >
+      Coba Lagi
+    </button>
+  ) : null}
+
+  <button
+    type="button"
+    className="rounded-xl border border-buma-border bg-white px-4 py-2 text-xs font-extrabold text-buma-text shadow-soft transition active:scale-95 hover:bg-black/5"
+    onClick={onClose}
+  >
+    Tutup
+  </button>
+</div>
+    </div>
+  )
+}
+
 /* ======= Measuring logic types ======= */
 type Pt = { x: number; y: number }
 type Line = { p1: Pt; p2: Pt; id: string; label?: string }
 
 const MIN_BENCH = 4
-const MAX_BENCH = 8
 const HIT_R = 6
 const NEAR = HIT_R * 2
 
@@ -110,7 +169,7 @@ export default function Measure() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
-
+  
   // ======= State =======
   const [imgSrc, setImgSrc] = useState<string>("")
   const [mode, setMode] = useState<"kalibrasi" | "ukur">("kalibrasi")
@@ -124,24 +183,15 @@ export default function Measure() {
     return Number.isFinite(n) && n > 0 ? n : 1
   }, [refMeterStr])
 
-  // ======= Reference presets (drop-down) =======
-  const REF_MAP = {
-    EX3600: 7.8,
-    EX2500: 7.0,
-    EX2000: 5.97,
-    TIANG: 4,
-  } as const
-
-  type RefKey = keyof typeof REF_MAP
-  const [refKey, setRefKey] = useState<RefKey | "">("")
+ const [refKey, setRefKey] = useState<RefKey | "">("")
   const refSelected = refKey !== ""
 
-  // sync refMeterStr mengikuti pilihan refKey
-  useEffect(() => {
-    if (!refSelected) return
-    setRefMeterStr(REF_MAP[refKey as RefKey].toFixed(2))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refKey])
+const maxBench = useMemo(() => getLimitM(refKey || null), [refKey])
+
+useEffect(() => {
+  if (!refSelected) return
+  setRefMeterStr(REF_PRESET_M[refKey as RefKey].toFixed(2))
+}, [refKey])
 
   // shift time (pelaksanaan) + shift (DAY/NIGHT)
   const [shift, setShift] = useState<"" | Shift>("")
@@ -183,6 +233,10 @@ export default function Measure() {
   // submit state
   const [inspectionId, setInspectionId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  type SubmitStatus = "idle" | "loading" | "success" | "error"
+const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle")
+const [submitMsg, setSubmitMsg] = useState<string>("")
 
   const isFormValid =
     inspectorName.trim() !== "" &&
@@ -371,7 +425,7 @@ export default function Measure() {
       if (!pixelPerMeter) return
       const meter = dist(m.p1, m.p2) / pixelPerMeter
       const deg = angleDeg(m.p1, m.p2)
-      const danger = meter < MIN_BENCH || meter > MAX_BENCH
+ const danger = meter < MIN_BENCH || meter > maxBench
       const label = m.label ?? labelFromIndex(idx)
       drawLine(
         ctx,
@@ -420,7 +474,7 @@ export default function Measure() {
     const meters = measurements.map((m) => dist(m.p1, m.p2) / pixelPerMeter)
     const maxHeightM = meters.length ? Math.max(...meters) : 0
     const linesCount = meters.length
-    const linesOkCount = meters.filter((x) => x >= MIN_BENCH && x <= MAX_BENCH).length
+const linesOkCount = meters.filter((x) => x >= MIN_BENCH && x <= maxBench).length
     return { maxHeightM, linesCount, linesOkCount }
   }
 
@@ -538,6 +592,8 @@ export default function Measure() {
       setCurrentDeg(null)
       setDrag(null)
       setInspectionId(null) // foto baru -> inspection baru
+      setSubmitStatus("idle")
+setSubmitMsg("")
 
       resetView()
 
@@ -761,9 +817,11 @@ export default function Measure() {
     }
     if (!pixelPerMeter || measurements.length === 0) return
 
-    try {
-      setIsSubmitting(true)
-      setHint("Submitting... (create inspection + upload measure)")
+  try {
+  setIsSubmitting(true)
+  setSubmitStatus("loading")
+  setSubmitMsg("Menyimpan inspeksi & mengunggah foto overlay...")
+  setHint("Submitting... (create inspection + upload measure)")
 
       let id = inspectionId
       if (!id) {
@@ -773,20 +831,57 @@ export default function Measure() {
 
       await uploadMeasure(id)
       await saveInspectionLines(id)
+setSubmitStatus("success")
+setSubmitMsg("Inspeksi berhasil tersimpan.")
+setTimeout(() => setSubmitStatus("idle"), 2000)
 
       const stats = computeStats()
       setHint(
         `Submit OK ✅  (Max: ${stats?.maxHeightM.toFixed(2)} m, Lines: ${stats?.linesCount}, OK: ${stats?.linesOkCount})`
       )
-    } catch (e: any) {
-      setHint(`Submit gagal ❌ ${e?.message ?? "unknown error"}`)
-    } finally {
-      setIsSubmitting(false)
-    }
+} catch (e: any) {
+  setSubmitStatus("error")
+  setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi.")
+  setHint(`Submit gagal ❌ ${e?.message ?? "unknown error"}`)
+} finally {
+  setIsSubmitting(false)
+}
   }
 
   return (
     <AppLayout>
+        {submitStatus !== "idle" && (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    {/* dark glass */}
+    <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" />
+
+    {/* card */}
+    <div className="relative mx-4 w-[min(92vw,420px)] rounded-2xl border border-buma-border bg-white p-6 shadow-2xl">
+      {submitStatus === "loading" ? (
+        <BumaLoader />
+      ) : submitStatus === "success" ? (
+        <SubmitResultCard
+          variant="success"
+          title="Tersimpan"
+          desc={submitMsg || "Data inspeksi berhasil disimpan."}
+          onClose={() => setSubmitStatus("idle")}
+        />
+      ) : (
+        <SubmitResultCard
+          variant="error"
+          title="Gagal"
+          desc={submitMsg || "Terjadi kendala. Silakan coba lagi."}
+          onClose={() => setSubmitStatus("idle")}
+        onRetry={() => {
+  setSubmitStatus("loading")
+  setSubmitMsg("Mencoba ulang menyimpan data...")
+  handleSubmit()
+}}
+        />
+      )}
+    </div>
+  </div>
+)}
       {/* Page header */}
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -988,11 +1083,12 @@ export default function Measure() {
                       : "border-buma-border focus:border-buma-green/60"
                       }`}
                   >
-                    <option value="">— Pilih unit referensi —</option>
-                    <option value="EX3600">EX3600 (7.80 m)</option>
-                    <option value="EX2500">EX2500 (7.00 m)</option>
-                    <option value="EX2000">EX2000 (5.97 m)</option>
-                    <option value="TIANG">Tiang (4.00 m)</option>
+                  <option value="">— Pilih unit referensi —</option>
+{(Object.keys(REF_PRESET_M) as RefKey[]).map((k) => (
+  <option key={k} value={k}>
+    {k} ({REF_PRESET_M[k].toFixed(2)} m)
+  </option>
+))}
                   </select>
                 </div>
               </div>
@@ -1060,7 +1156,6 @@ export default function Measure() {
                   }}
                   className="mt-1 w-full rounded-xl border border-buma-border bg-white px-3 py-2 text-sm outline-none transition focus:border-buma-green/60"
                 >
-                  <option value="">— Pilih orientation —</option>
                   <option value="vertical">Vertical</option>
                   <option value="horizontal">Horizontal</option>
                   <option value="free">Free</option>
@@ -1139,6 +1234,11 @@ export default function Measure() {
                   value={currentDeg != null ? `${currentDeg.toFixed(1)}°` : "—"}
                   tone={currentDeg != null ? "ok" : "info"}
                 />
+                <StatPill
+  label="Limit"
+  value={`${maxBench.toFixed(2)} m`}
+  tone="info"
+/>
               </div>
             </div>
           </div>
@@ -1304,7 +1404,7 @@ export default function Measure() {
             </div>
 
             {/* Right toolbar */}
-            <div className="absolute right-3 top-28 flex flex-col gap-2">
+            <div className={`absolute right-3 top-28 flex flex-col gap-2 ${submitStatus === "loading" ? "pointer-events-none opacity-40" : ""}`}>
               <IconButton label="Zoom In" icon="＋" onClick={() => zoomBy(1.15)} />
               <IconButton label="Zoom Out" icon="－" onClick={() => zoomBy(1 / 1.15)} />
               <IconButton label="Reset View" icon="⟲" onClick={resetView} />
@@ -1317,7 +1417,7 @@ export default function Measure() {
                 <button
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-50"
                   type="button"
-                  disabled={isSubmitting || !pixelPerMeter || measurements.length === 0}
+                  disabled={submitStatus === "loading" || !pixelPerMeter || measurements.length === 0}
                   title={
                     isSubmitting
                       ? "Submitting..."
