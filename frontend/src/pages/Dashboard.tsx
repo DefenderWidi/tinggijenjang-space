@@ -769,9 +769,36 @@ function ReviewDetailModal({
 
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/35 to-transparent p-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition">
                       <span className="text-xs font-extrabold text-white/90">Klik untuk perbesar</span>
-                      <span className="rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-[11px] font-extrabold text-white/85 backdrop-blur">
-                        Perbesar
-                      </span>
+                    <span
+  className="
+  inline-flex items-center justify-center
+  h-8 w-8
+  rounded-full
+  border border-white/25
+  bg-white/10
+  text-white/90
+  backdrop-blur
+  shadow-sm
+  transition
+  group-hover:scale-105
+"
+>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+  >
+    <path
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      d="m21 21l-4.343-4.343m0 0A8 8 0 1 0 5.343 5.343a8 8 0 0 0 11.314 11.314M11 8v6m-3-3h6"
+    />
+  </svg>
+</span>
                     </div>
                   </div>
                 </button>
@@ -819,128 +846,241 @@ function ReviewDetailModal({
                 </div>
               </div>
 
-             {/* RIGHT */}
+         {/* RIGHT */}
 <div className="space-y-3">
-  {/* Card Verifikasi (PJA-like, view-only) */}
-  <div className="rounded-2xl border border-buma-border bg-white p-4">
+
+  {/* Card Verifikasi */}
+  <div
+    className="
+    relative rounded-3xl
+    border border-buma-border
+    bg-white
+    p-3 sm:p-4
+    shadow-soft
+    before:absolute before:inset-0 before:rounded-3xl
+    before:border before:border-black/5
+    before:pointer-events-none
+  "
+  >
     <div className="flex items-start justify-between gap-3">
       <div>
-        <div className="text-sm font-extrabold text-buma-text">Verifikasi Tiap Titik</div>
-        <div className="mt-1 text-xs text-buma-muted">
-          View-only hasil verifikasi dari PJA. Selisih = Actual − Standar.
+        <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+          Verifikasi Tiap Titik
+        </div>
+
+        <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+          Menampilkan hasil verifikasi dari PJA.
         </div>
       </div>
 
-      <div className="shrink-0 rounded-2xl border border-buma-border bg-buma-bg px-3 py-2 text-xs font-extrabold text-buma-muted">
+      <div
+        className="
+        shrink-0
+        rounded-xl
+        border border-buma-border/70
+        bg-gradient-to-r from-buma-bg to-white
+        px-3 py-1.5
+        text-[11px] font-extrabold text-buma-muted
+        shadow-sm
+      "
+      >
         Limit {standardM.toFixed(1)} m
       </div>
     </div>
 
-    <div className="mt-3 space-y-2">
+    <div className="mt-3 space-y-2.5">
       {loading ? (
-        <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-xs text-buma-muted">
+        <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-[11px] text-buma-muted">
           Loading verifikasi…
         </div>
       ) : detail?.lines && detail.lines.length ? (
         detail.lines.map((ln) => {
-          const v = ln.ok
 
+          const v = ln.ok
           const actual = Number.isFinite(ln.heightM) ? ln.heightM : null
           const delta = actual == null ? null : actual - standardM
 
+          const badgeClass =
+            v === null
+              ? "border-buma-border bg-white text-buma-muted"
+              : v
+                ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+
+          const badgeText = v === null ? "TIDAK ADA DATA" : v ? "SESUAI" : "TIDAK SESUAI"
+
           return (
-            <div key={ln.label} className="rounded-2xl border border-buma-border bg-buma-bg p-3">
-              {/* Row atas */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-semibold text-buma-muted leading-none">titik</span>
-                    <span className="mt-1 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-buma-border bg-white text-sm font-extrabold text-buma-text">
-                      {ln.label}
-                    </span>
+            <div
+              key={ln.label}
+              className="
+              relative
+              rounded-2xl
+              border border-buma-border
+              bg-gradient-to-b from-buma-bg to-white
+              p-2.5 sm:p-3
+              shadow-sm
+              before:absolute before:inset-0 before:rounded-2xl
+              before:border before:border-black/5
+              before:pointer-events-none
+            "
+            >
+
+              {/* ===== BLOK 1: Kesesuaian Titik ===== */}
+              <div className="rounded-xl border border-buma-border/80 bg-white p-2.5">
+
+                <div className="text-[12px] font-extrabold text-buma-text">
+                  Kesesuaian Titik
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-3">
+
+                  <div className="flex items-center gap-3">
+
+                    <div className="text-[12px] font-semibold text-buma-text">
+                      Titik
+                    </div>
+
+                    <div
+                      className="
+                      relative
+                      inline-flex
+                      h-10 w-10
+                      items-center justify-center
+                      rounded-xl
+                      border border-buma-border
+                      bg-gradient-to-b from-white to-buma-bg
+                      text-xl font-extrabold text-buma-text
+                      shadow-sm
+                    "
+                    >
+                      <span className="absolute inset-1 rounded-lg bg-white/40" />
+                      <span className="relative">{ln.label}</span>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] text-buma-muted">
+                        Tinggi
+                      </div>
+
+                      <div className="text-[14px] font-extrabold text-buma-text tabular-nums">
+                        {actual == null ? "—" : `${actual.toFixed(2)} m`}
+                      </div>
+                    </div>
+
                   </div>
 
-                  <div className="min-w-0">
-                    <div className="text-[11px] font-semibold text-buma-muted">Tinggi</div>
-                    <div className="mt-0.5 text-sm font-extrabold text-buma-text">
+                  <span
+                    className={cls(
+                      "rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
+                      badgeClass
+                    )}
+                  >
+                    {badgeText}
+                  </span>
+
+                </div>
+              </div>
+
+
+              {/* ===== BLOK 2: Kesesuaian Tinggi Jenjang ===== */}
+              <div className="mt-2.5 rounded-xl border border-buma-border/80 bg-white p-2.5">
+
+                <div className="text-[12px] font-extrabold text-buma-text">
+                  Kesesuaian Tinggi Jenjang
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+
+                  <div className="rounded-xl border border-buma-border/70 bg-gradient-to-r from-buma-bg to-white px-2 py-1.5">
+                    <div className="text-[9px] uppercase tracking-widest text-buma-muted">
+                      Standar
+                    </div>
+
+                    <div className="text-[12px] font-extrabold text-buma-text tabular-nums">
+                      {standardM.toFixed(2)} m
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-buma-border/70 bg-gradient-to-r from-buma-bg to-white px-2 py-1.5">
+                    <div className="text-[9px] uppercase tracking-widest text-buma-muted">
+                      Actual
+                    </div>
+
+                    <div className="text-[12px] font-extrabold text-buma-text tabular-nums">
                       {actual == null ? "—" : `${actual.toFixed(2)} m`}
                     </div>
                   </div>
+
+                  <div className="rounded-xl border border-buma-border/70 bg-gradient-to-r from-buma-bg to-white px-2 py-1.5">
+                    <div className="text-[9px] uppercase tracking-widest text-buma-muted">
+                      Selisih
+                    </div>
+
+                    <div
+                      className={cls(
+                        "text-[12px] font-extrabold tabular-nums",
+                        delta == null
+                          ? "text-buma-muted"
+                          : delta > 0
+                            ? "text-red-600"
+                            : "text-buma-green"
+                      )}
+                    >
+                      {delta == null ? "—" : fmtSigned(delta)}
+                    </div>
+                  </div>
+
                 </div>
 
-                <span
-                  className={cls(
-                    "shrink-0 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-extrabold",
-                    v === null
-                      ? "border-buma-border bg-white text-buma-muted"
-                      : v
-                        ? "border-buma-blue/30 bg-buma-blue/10 text-buma-blue"
-                        : "border-red-500/30 bg-red-500/10 text-red-600"
+                <div className="mt-2 text-[10px] text-buma-muted leading-relaxed">
+                  {delta == null ? (
+                    <>Selisih tidak tersedia karena data tinggi belum lengkap.</>
+                  ) : delta > 0 ? (
+                    <>
+                      Actual <b className="text-buma-text">melebihi</b> limit ({fmtSigned(delta)})
+                    </>
+                  ) : (
+                    <>
+                      Actual <b className="text-buma-text">di bawah</b> limit ({fmtSigned(delta)})
+                    </>
                   )}
-                >
-                  {v === null ? "Tidak ada data" : v ? "Sesuai" : "Tidak sesuai"}
-                </span>
-              </div>
-
-              {/* Panel per titik: Standar / Actual / Selisih */}
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
-                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
-                  <div className="text-buma-muted">Standar</div>
-                  <div className="font-extrabold text-buma-text">{standardM.toFixed(2)} m</div>
                 </div>
 
-                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
-                  <div className="text-buma-muted">Actual</div>
-                  <div className="font-extrabold text-buma-text">
-                    {actual == null ? "—" : `${actual.toFixed(2)} m`}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
-                  <div className="text-buma-muted">Selisih</div>
-                  <div
-                    className={cls(
-                      "font-extrabold",
-                      delta == null ? "text-buma-muted" : delta > 0 ? "text-red-600" : "text-buma-green"
-                    )}
-                  >
-                    {delta == null ? "—" : fmtSigned(delta)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-2 text-[11px] text-buma-muted">
-                {delta == null ? (
-                  <>*Selisih tidak tersedia karena data tinggi belum lengkap.</>
-                ) : delta > 0 ? (
-                  <>
-                    *Actual <b className="text-buma-text">melebihi</b> limit ({fmtSigned(delta)}).
-                  </>
-                ) : (
-                  <>
-                    *Actual <b className="text-buma-text">di bawah</b> limit ({fmtSigned(delta)}).
-                  </>
-                )}
               </div>
             </div>
           )
         })
       ) : (
-        <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-xs text-buma-muted">
+        <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-[11px] text-buma-muted">
           Data verifikasi per titik belum tersedia.
         </div>
       )}
     </div>
   </div>
 
-  {/* Card Catatan */}
-  <div className="rounded-2xl border border-buma-border bg-white p-4">
-    <div className="text-sm font-extrabold text-buma-text">Catatan PJA</div>
 
-    <div className="mt-3 rounded-2xl border border-buma-border bg-buma-bg px-3 py-2 text-sm text-buma-text whitespace-pre-wrap">
+  {/* Card Catatan */}
+  <div
+    className="
+    relative rounded-3xl
+    border border-buma-border
+    bg-white
+    p-3 sm:p-4
+    shadow-soft
+    before:absolute before:inset-0 before:rounded-3xl
+    before:border before:border-black/5
+    before:pointer-events-none
+  "
+  >
+    <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+      Catatan PJA
+    </div>
+
+    <div className="mt-2 rounded-xl border border-buma-border bg-gradient-to-b from-buma-bg to-white px-3 py-2 text-[12px] text-buma-text whitespace-pre-wrap">
       {detail?.notes ? detail.notes : "— Tidak ada catatan / belum tersedia —"}
     </div>
   </div>
+
 </div>
 </div>
 </div>

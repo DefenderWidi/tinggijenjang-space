@@ -83,12 +83,6 @@ function fmtDateTime(iso: string) {
   return { date, time }
 }
 
-function fmtSigned(x: number) {
-  const v = Number.isFinite(x) ? x : 0
-  const sign = v > 0 ? "+" : ""
-  return `${sign}${v.toFixed(2)} m`
-}
-
 function pillReview(review: ReviewStatus) {
   if (review === "VALID")
     return "border-buma-green/30 bg-gradient-to-r from-buma-green/15 to-buma-green/5 text-buma-green"
@@ -813,9 +807,36 @@ export default function PjaDashboard() {
 
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/35 to-transparent p-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition">
                           <span className="text-xs font-extrabold text-white/90">Klik untuk perbesar</span>
-                          <span className="rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-[11px] font-extrabold text-white/85 backdrop-blur">
-                            Perbesar
-                          </span>
+                         <span
+  className="
+  inline-flex items-center justify-center
+  h-8 w-8
+  rounded-full
+  border border-white/25
+  bg-white/10
+  text-white/90
+  backdrop-blur
+  shadow-sm
+  transition
+  group-hover:scale-105
+"
+>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+  >
+    <path
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      d="m21 21l-4.343-4.343m0 0A8 8 0 1 0 5.343 5.343a8 8 0 0 0 11.314 11.314M11 8v6m-3-3h6"
+    />
+  </svg>
+</span>
                         </div>
                       </div>
                     </button>
@@ -872,9 +893,6 @@ export default function PjaDashboard() {
                         {lines.map((ln) => {
                           const v = lineVerify[ln.label] ?? null
 
-                          const actual = ln.heightM
-                          const delta = actual == null ? null : actual - standardM
-
                           const toggleVal = (next: boolean) => {
                             setLineVerify((prev) => {
                               const cur = prev[ln.label]
@@ -914,33 +932,6 @@ export default function PjaDashboard() {
                                 >
                                   {v === null ? "Belum Diverifikasi" : v ? "Sesuai" : "Tidak sesuai"}
                                 </span>
-                              </div>
-
-                              {/* Panel per titik */}
-                              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
-                                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
-                                  <div className="text-buma-muted">Standar</div>
-                                  <div className="font-extrabold text-buma-text">{standardM.toFixed(2)} m</div>
-                                </div>
-
-                                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
-                                  <div className="text-buma-muted">Actual</div>
-                                  <div className="font-extrabold text-buma-text">
-                                    {actual == null ? "—" : `${actual.toFixed(2)} m`}
-                                  </div>
-                                </div>
-
-                                <div className="rounded-xl border border-buma-border bg-white px-2 py-1">
-                                  <div className="text-buma-muted">Selisih</div>
-                                  <div
-                                    className={cls(
-                                      "font-extrabold",
-                                      delta == null ? "text-buma-muted" : delta > 0 ? "text-red-600" : "text-buma-green"
-                                    )}
-                                  >
-                                    {delta == null ? "—" : fmtSigned(delta)}
-                                  </div>
-                                </div>
                               </div>
 
                               {/* Buttons */}
