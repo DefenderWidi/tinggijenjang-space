@@ -128,7 +128,11 @@ function pelaksanaanLabel(p?: string) {
 function ymd(dt: string) {
   const d = new Date(dt)
   if (!Number.isFinite(d.getTime())) return String(dt).split(" ")[0] ?? ""
-  return d.toISOString().slice(0, 10)
+
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
 }
 
 function inRange(dateStr: string, from?: string, to?: string) {
@@ -351,10 +355,12 @@ function ActualDistributionChart({
   shovelRows,
   backhoeRows,
   empty,
+  loading,
 }: {
   shovelRows: ActualBucketRow[]
   backhoeRows: ActualBucketRow[]
   empty: boolean
+  loading: boolean
 }) {
   const shovelData = [
     {
@@ -483,11 +489,21 @@ function ActualDistributionChart({
           Shovel dan Backhoe dipisahkan agar distribusi bucket masing-masing alat lebih jelas.
         </div>
 
-        {empty ? (
-          <div className="mt-5 rounded-2xl border border-buma-border bg-buma-bg p-4 text-sm text-buma-muted">
-            Belum ada data titik actual untuk ditampilkan.
-          </div>
-        ) : (
+       {loading ? (
+  <div className="mt-5 flex items-center justify-center rounded-2xl border border-buma-border bg-white p-8">
+    <div className="relative flex items-center justify-center">
+      {/* Outer Ring */}
+      <div className="h-16 w-16 animate-spin rounded-full border-4 border-transparent border-t-buma-green border-r-buma-green/40 sm:h-20 sm:w-20" />
+
+      {/* Inner Ring */}
+      <div className="absolute h-11 w-11 animate-[spin_1.2s_linear_reverse_infinite] rounded-full border-4 border-transparent border-t-buma-blue border-l-buma-blue/40 sm:h-14 sm:w-14" />
+    </div>
+  </div>
+) : empty ? (
+  <div className="mt-5 rounded-2xl border border-buma-border bg-buma-bg p-4 text-sm text-buma-muted">
+    Belum ada data titik actual untuk ditampilkan.
+  </div>
+) : (
           <div className="mt-4 grid gap-4 xl:grid-cols-2">
             <Section
               title="Shovel"
@@ -1606,7 +1622,6 @@ async function exportExcelCurrentView() {
       if (!cancelled) setActualDistLoading(false)
     }
   }
-
   buildActualDistribution()
 
   return () => {
@@ -1626,9 +1641,6 @@ async function exportExcelCurrentView() {
               <div className="mt-1 text-sm text-buma-muted">
                 Monitoring kepatuhan tinggi jenjang & ringkasan verifikasi (Daily / Weekly).
               </div>
-       <div className="mt-1 text-xs text-buma-muted">
-  * Grafik kepatuhan dihitung berdasarkan <b className="text-buma-text">jumlah garis</b>, sedangkan grafik distribusi dihitung dari <b className="text-buma-text">actual point (height_m)</b>.
-</div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
@@ -1743,8 +1755,8 @@ async function exportExcelCurrentView() {
 <ActualDistributionChart
   shovelRows={actualDist.shovel}
   backhoeRows={actualDist.backhoe}
+  loading={actualDistLoading}
   empty={
-    actualDistLoading ||
     (
       actualDist.shovel.reduce((s, x) => s + x.count, 0) +
       actualDist.backhoe.reduce((s, x) => s + x.count, 0)

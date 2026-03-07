@@ -429,9 +429,9 @@ export default function PjaDashboard() {
   }, [lines, lineVerify])
 
   // standar = limit berdasarkan unit (sementara return 8 untuk semua)
-  const standardM = useMemo(() => {
-    return getLimitM(measureMeta?.ref_unit ?? null)
-  }, [measureMeta?.ref_unit])
+const standardM = useMemo(() => {
+  return getLimitM(measureMeta?.ref_unit ?? active?.ref_unit ?? null)
+}, [measureMeta?.ref_unit, active?.ref_unit])
 
   async function send() {
     if (!active) return
