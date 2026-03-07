@@ -177,20 +177,24 @@ export default function Measure() {
     "vertical" | "horizontal" | "free"
   >("vertical")
 
-  const [refMeterStr, setRefMeterStr] = useState<string>("7.80")
-  const refMeter = useMemo(() => {
-    const n = Number(refMeterStr)
-    return Number.isFinite(n) && n > 0 ? n : 1
-  }, [refMeterStr])
+const [refMeterStr, setRefMeterStr] = useState<string>("")
+const [refKey, setRefKey] = useState<RefKey | "">("")
+const refSelected = refKey !== ""
 
- const [refKey, setRefKey] = useState<RefKey | "">("")
-  const refSelected = refKey !== ""
+const refMeter = useMemo(() => {
+  if (!refSelected) return 0
+  const n = Number(refMeterStr)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}, [refMeterStr, refSelected])
 
 const maxBench = useMemo(() => getLimitM(refKey || null), [refKey])
 
 useEffect(() => {
-  if (!refSelected) return
-  setRefMeterStr(REF_PRESET_M[refKey as RefKey].toFixed(2))
+  if (!refKey) {
+    setRefMeterStr("")
+    return
+  }
+  setRefMeterStr(REF_PRESET_M[refKey].toFixed(2))
 }, [refKey])
 
   // shift time (pelaksanaan) + shift (DAY/NIGHT)
@@ -609,12 +613,18 @@ setSubmitMsg("")
     const px = dist(p1, p2)
     if (px <= 0.0001) return
 
-    if (mode === "kalibrasi") {
-      const ppm = px / refMeter
-      setPixelPerMeter(ppm)
-      setReferenceLine({ p1, p2, id: "ref" })
-      setHint(`Kalibrasi OK. Scale = ${ppm.toFixed(2)} px/m. Pindah ke mode Ukur.`)
-    } else {
+  if (mode === "kalibrasi") {
+  if (!refSelected || refMeter <= 0) {
+    setCalError(true)
+    setHint("Pilih unit referensi dulu sebelum kalibrasi.")
+    return
+  }
+
+  const ppm = px / refMeter
+  setPixelPerMeter(ppm)
+  setReferenceLine({ p1, p2, id: "ref" })
+  setHint(`Kalibrasi OK. Scale = ${ppm.toFixed(2)} px/m. Pindah ke mode Ukur.`)
+} else {
       if (!pixelPerMeter) {
         setHint("Skala belum ada. Kalibrasi dulu (set 2 titik referensi).")
         return
@@ -638,6 +648,13 @@ setSubmitMsg("")
       setHint("Upload foto dulu. Klik Import Photo (Source).")
       return
     }
+
+    if (mode === "kalibrasi" && !refSelected) {
+  setCalError(true)
+  setHint("Pilih unit referensi dulu sebelum menentukan 2 titik kalibrasi.")
+  return
+}
+
     if (e.button === 2) return
 
     const m = getMouse(e)
@@ -696,6 +713,11 @@ setSubmitMsg("")
     }
 
     if (drag.kind === "ref") {
+      if (!refSelected || refMeter <= 0) {
+  setHint("Pilih unit referensi yang valid sebelum mengubah kalibrasi.")
+  return
+}
+
       setReferenceLine((prev) => {
         if (!prev) return prev
         const p1 = { ...prev.p1 }
@@ -1116,7 +1138,7 @@ setTimeout(() => setSubmitStatus("idle"), 2000)
 
               {calError && !refSelected && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
-                  ⚠ Pilih unit referensi (EX3600 / EX2500) sebelum melakukan kalibrasi.
+                  ⚠ Pilih unit referensi sebelum melakukan kalibrasi.
                 </div>
               )}
 
@@ -1417,16 +1439,18 @@ setTimeout(() => setSubmitStatus("idle"), 2000)
                 <button
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-50"
                   type="button"
-                  disabled={submitStatus === "loading" || !pixelPerMeter || measurements.length === 0}
-                  title={
-                    isSubmitting
-                      ? "Submitting..."
-                      : !pixelPerMeter
-                        ? "Kalibrasi dulu"
-                        : measurements.length === 0
-                          ? "Belum ada garis ukur"
-                          : "Submit"
-                  }
+                 disabled={submitStatus === "loading" || !refSelected || !pixelPerMeter || measurements.length === 0}
+              title={
+  isSubmitting
+    ? "Submitting..."
+    : !refSelected
+      ? "Pilih unit referensi dulu"
+      : !pixelPerMeter
+        ? "Kalibrasi dulu"
+        : measurements.length === 0
+          ? "Belum ada garis ukur"
+          : "Submit"
+}
                   onClick={handleSubmit}
                 >
                   <svg
