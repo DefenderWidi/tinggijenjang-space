@@ -2,16 +2,16 @@ import { useMemo, useState, useEffect } from "react"
 import AppLayout from "../layouts/AppLayout"
 import {
   ResponsiveContainer,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
   BarChart,
   Bar,
   XAxis,
   YAxis,
-  Tooltip,
-  Legend,
   CartesianGrid,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts"
 import * as XLSX from "xlsx"
 import { getLimitM } from "../config/reference"
@@ -48,6 +48,12 @@ type ReviewDetail = {
   notes: string | null
   lines?: ReviewLine[]
   photoUrl?: string | null
+}
+
+type ActualBucketRow = {
+  label: string
+  count: number
+  pct: number
 }
 
 /* =========================
@@ -133,11 +139,6 @@ function inRange(dateStr: string, from?: string, to?: string) {
 
 function inMonth(dateStr: string, month: string) {
   return dateStr.startsWith(month)
-}
-
-function fakeWeekLabel(dateStr: string) {
-  const m = Number(dateStr.split("-")[1] ?? 0)
-  return m <= 2 ? "W-08" : "W-00"
 }
 
 function pctOk(linesOkCount: number, linesCount: number) {
@@ -346,48 +347,164 @@ function DonutCompliance({ ok, bad }: { ok: number; bad: number }) {
   )
 }
 
-function TrendBar({
-  title,
-  subtitle,
-  data,
+function ActualDistributionChart({
+  shovelRows,
+  backhoeRows,
   empty,
 }: {
-  title: string
-  subtitle?: string
-  data: Array<{ label: string; sesuai: number; tidakSesuai: number }>
+  shovelRows: ActualBucketRow[]
+  backhoeRows: ActualBucketRow[]
   empty: boolean
 }) {
+  const shovelData = [
+    {
+      label: "< 7 m",
+      value: shovelRows.find((x) => x.label === "Di bawah 7 m")?.count ?? 0,
+    },
+    {
+      label: "7-8 m",
+      value: shovelRows.find((x) => x.label === "7-8 m")?.count ?? 0,
+    },
+    {
+      label: "8-9 m",
+      value: shovelRows.find((x) => x.label === "8-9 m")?.count ?? 0,
+    },
+    {
+      label: "> 9 m",
+      value: shovelRows.find((x) => x.label === "Di atas 9 m")?.count ?? 0,
+    },
+  ]
+
+  const backhoeData = [
+    {
+      label: "< 3 m",
+      value: backhoeRows.find((x) => x.label === "Di bawah 3 m")?.count ?? 0,
+    },
+    {
+      label: "3-4 m",
+      value: backhoeRows.find((x) => x.label === "3-4 m")?.count ?? 0,
+    },
+    {
+      label: "4-5 m",
+      value: backhoeRows.find((x) => x.label === "4-5 m")?.count ?? 0,
+    },
+    {
+      label: "> 5 m",
+      value: backhoeRows.find((x) => x.label === "Lebih dari 5 m")?.count ?? 0,
+    },
+  ]
+
+  const totalShovel = shovelRows.reduce((s, x) => s + x.count, 0)
+  const totalBackhoe = backhoeRows.reduce((s, x) => s + x.count, 0)
+
+  function Section({
+    title,
+    subtitle,
+    total,
+    data,
+    fill,
+    legendLabel,
+  }: {
+    title: string
+    subtitle: string
+    total: number
+    data: Array<{ label: string; value: number }>
+    fill: string
+    legendLabel: string
+  }) {
+    return (
+      <div className="rounded-2xl border border-buma-border bg-white p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+              {title}
+            </div>
+            <div className="mt-1 text-[11px] text-buma-muted">{subtitle}</div>
+          </div>
+
+          <div className="rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-[11px] font-extrabold text-buma-muted">
+            Total titik: <span className="text-buma-text">{total}</span>
+          </div>
+        </div>
+
+        <div className="mt-3 h-[250px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} barCategoryGap={20}>
+              <CartesianGrid stroke="rgba(0,0,0,0.06)" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11 }}
+              />
+              <YAxis
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip
+                labelFormatter={(label) => `Kategori: ${String(label ?? "")}`}
+                formatter={(value: number | string | undefined) => [`${value ?? 0} titik`, legendLabel]}
+              />
+              <Legend />
+              <Bar
+                dataKey="value"
+                name={legendLabel}
+                fill={fill}
+                radius={[10, 10, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-3xl border border-buma-border bg-white shadow-soft">
       <div className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">{title}</div>
-            <div className="mt-1 text-sm text-buma-muted">{subtitle ?? "Trend jumlah garis sesuai vs tidak sesuai."}</div>
+            <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">
+              Distribusi Titik Actual
+            </div>
+            <div className="mt-1 text-sm text-buma-muted">
+              Distribusi tinggi actual per titik berdasarkan tipe alat referensi.
+            </div>
           </div>
 
           <div className="rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-xs text-buma-muted">
-            <span className="font-semibold text-buma-text">Chart: </span>Bar
+            <span className="font-semibold text-buma-text">Sumber: </span>
+            Actual point (height_m)
           </div>
+        </div>
+
+        <div className="mt-2 rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-[11px] text-buma-muted">
+          Shovel dan Backhoe dipisahkan agar distribusi bucket masing-masing alat lebih jelas.
         </div>
 
         {empty ? (
           <div className="mt-5 rounded-2xl border border-buma-border bg-buma-bg p-4 text-sm text-buma-muted">
-            Belum ada data untuk trend pada periode ini.
+            Belum ada data titik actual untuk ditampilkan.
           </div>
         ) : (
-          <div className="mt-4 h-[260px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} barCategoryGap={14}>
-                <CartesianGrid stroke="rgba(0,0,0,0.06)" vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="sesuai" name="Garis sesuai" fill="#15803D" radius={[10, 10, 0, 0]} />
-                <Bar dataKey="tidakSesuai" name="Garis tidak sesuai" fill="#EF4444" radius={[10, 10, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            <Section
+              title="Shovel"
+              subtitle="Bucket: di bawah 7 m, 7-8 m, 8-9 m, di atas 9 m"
+              total={totalShovel}
+              data={shovelData}
+              fill="#15803D"
+              legendLabel="Shovel"
+            />
+            <Section
+              title="Backhoe"
+              subtitle="Bucket: di bawah 3 m, 3-4 m, 4-5 m, lebih dari 5 m"
+              total={totalBackhoe}
+              data={backhoeData}
+              fill="#2563EB"
+              legendLabel="Backhoe"
+            />
           </div>
         )}
       </div>
@@ -1171,6 +1288,26 @@ export default function Dashboard() {
     setReviewRow(null)
   }
 
+  const [actualDistLoading, setActualDistLoading] = useState(false)
+
+const [actualDist, setActualDist] = useState<{
+  shovel: ActualBucketRow[]
+  backhoe: ActualBucketRow[]
+}>({
+  shovel: [
+    { label: "Di bawah 7 m", count: 0, pct: 0 },
+    { label: "7-8 m", count: 0, pct: 0 },
+    { label: "8-9 m", count: 0, pct: 0 },
+    { label: "Di atas 9 m", count: 0, pct: 0 },
+  ],
+  backhoe: [
+    { label: "Di bawah 3 m", count: 0, pct: 0 },
+    { label: "3-4 m", count: 0, pct: 0 },
+    { label: "4-5 m", count: 0, pct: 0 },
+    { label: "Lebih dari 5 m", count: 0, pct: 0 },
+  ],
+})
+
   useEffect(() => {
     const ac = new AbortController()
 
@@ -1330,51 +1467,152 @@ async function exportExcelCurrentView() {
     return { ok, bad, total: totalLines }
   }, [inspectionsReviewed])
 
-  const trendData = useMemo(() => {
-    const rows = inspectionsReviewed
-    if (rows.length === 0) return []
+  const isEmpty = inspections.length === 0
 
-    if (mode === "DAILY") {
-      const byDay = new Map<string, { sesuai: number; tidakSesuai: number }>()
-      rows.forEach((x) => {
-        const d = ymd(x.inspectedAt)
-        const cur = byDay.get(d) ?? { sesuai: 0, tidakSesuai: 0 }
+  useEffect(() => {
+  let cancelled = false
 
-        const okLines = x.linesOkCount ?? 0
-        const totalLines = x.linesCount ?? 0
-        const badLines = Math.max(0, totalLines - okLines)
-
-        cur.sesuai += okLines
-        cur.tidakSesuai += badLines
-        byDay.set(d, cur)
+  async function buildActualDistribution() {
+    if (!inspections.length) {
+      setActualDist({
+        shovel: [
+          { label: "Di bawah 7 m", count: 0, pct: 0 },
+          { label: "7-8 m", count: 0, pct: 0 },
+          { label: "8-9 m", count: 0, pct: 0 },
+          { label: "Di atas 9 m", count: 0, pct: 0 },
+        ],
+        backhoe: [
+          { label: "Di bawah 3 m", count: 0, pct: 0 },
+          { label: "3-4 m", count: 0, pct: 0 },
+          { label: "4-5 m", count: 0, pct: 0 },
+          { label: "Lebih dari 5 m", count: 0, pct: 0 },
+        ],
       })
-
-      return Array.from(byDay.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([label, v]) => ({ label, ...v }))
+      return
     }
 
-    const wk = new Map<string, { sesuai: number; tidakSesuai: number }>()
-    rows.forEach((x) => {
-      const d = ymd(x.inspectedAt)
-      const w = fakeWeekLabel(d)
-      const cur = wk.get(w) ?? { sesuai: 0, tidakSesuai: 0 }
+    setActualDistLoading(true)
 
-      const okLines = x.linesOkCount ?? 0
-      const totalLines = x.linesCount ?? 0
-      const badLines = Math.max(0, totalLines - okLines)
+    try {
+      const shovelCounts = {
+        under7: 0,
+        m7to8: 0,
+        m8to9: 0,
+        above9: 0,
+      }
 
-      cur.sesuai += okLines
-      cur.tidakSesuai += badLines
-      wk.set(w, cur)
-    })
+      const backhoeCounts = {
+        under3: 0,
+        m3to4: 0,
+        m4to5: 0,
+        above5: 0,
+      }
 
-    return Array.from(wk.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([label, v]) => ({ label, ...v }))
-  }, [inspectionsReviewed, mode])
+      const batchSize = 10
 
-  const isEmpty = inspections.length === 0
+      for (let i = 0; i < inspections.length; i += batchSize) {
+        const batch = inspections.slice(i, i + batchSize)
+
+        const batchResults = await Promise.all(
+          batch.map(async (insp) => {
+            const ref = String(insp.refUnit ?? "").toUpperCase().trim()
+            const lines = await fetchLinesRaw(insp.id)
+            return { ref, lines }
+          })
+        )
+
+        for (const item of batchResults) {
+          const prefix = item.ref.charAt(0)
+
+          for (const ln of item.lines) {
+            const h = Number(ln.height_m)
+            if (!Number.isFinite(h)) continue
+
+            if (prefix === "S") {
+              if (h < 7) shovelCounts.under7 += 1
+              else if (h >= 7 && h < 8) shovelCounts.m7to8 += 1
+              else if (h >= 8 && h < 9) shovelCounts.m8to9 += 1
+              else shovelCounts.above9 += 1
+            }
+
+            if (prefix === "B") {
+              if (h < 3) backhoeCounts.under3 += 1
+              else if (h >= 3 && h < 4) backhoeCounts.m3to4 += 1
+              else if (h >= 4 && h < 5) backhoeCounts.m4to5 += 1
+              else backhoeCounts.above5 += 1
+            }
+          }
+        }
+      }
+
+      const shovelTotal =
+        shovelCounts.under7 + shovelCounts.m7to8 + shovelCounts.m8to9 + shovelCounts.above9
+
+      const backhoeTotal =
+        backhoeCounts.under3 + backhoeCounts.m3to4 + backhoeCounts.m4to5 + backhoeCounts.above5
+
+      const pct = (count: number, total: number) =>
+        total > 0 ? Math.round((count / total) * 100) : 0
+
+      if (cancelled) return
+
+      setActualDist({
+        shovel: [
+          {
+            label: "Di bawah 7 m",
+            count: shovelCounts.under7,
+            pct: pct(shovelCounts.under7, shovelTotal),
+          },
+          {
+            label: "7-8 m",
+            count: shovelCounts.m7to8,
+            pct: pct(shovelCounts.m7to8, shovelTotal),
+          },
+          {
+            label: "8-9 m",
+            count: shovelCounts.m8to9,
+            pct: pct(shovelCounts.m8to9, shovelTotal),
+          },
+          {
+            label: "Di atas 9 m",
+            count: shovelCounts.above9,
+            pct: pct(shovelCounts.above9, shovelTotal),
+          },
+        ],
+        backhoe: [
+          {
+            label: "Di bawah 3 m",
+            count: backhoeCounts.under3,
+            pct: pct(backhoeCounts.under3, backhoeTotal),
+          },
+          {
+            label: "3-4 m",
+            count: backhoeCounts.m3to4,
+            pct: pct(backhoeCounts.m3to4, backhoeTotal),
+          },
+          {
+            label: "4-5 m",
+            count: backhoeCounts.m4to5,
+            pct: pct(backhoeCounts.m4to5, backhoeTotal),
+          },
+          {
+            label: "Lebih dari 5 m",
+            count: backhoeCounts.above5,
+            pct: pct(backhoeCounts.above5, backhoeTotal),
+          },
+        ],
+      })
+    } finally {
+      if (!cancelled) setActualDistLoading(false)
+    }
+  }
+
+  buildActualDistribution()
+
+  return () => {
+    cancelled = true
+  }
+}, [inspections])
 
   return (
     <AppLayout>
@@ -1388,9 +1626,9 @@ async function exportExcelCurrentView() {
               <div className="mt-1 text-sm text-buma-muted">
                 Monitoring kepatuhan tinggi jenjang & ringkasan verifikasi (Daily / Weekly).
               </div>
-              <div className="mt-1 text-xs text-buma-muted">
-                * Semua metrik grafik dihitung berdasarkan <b className="text-buma-text">jumlah garis</b>.
-              </div>
+       <div className="mt-1 text-xs text-buma-muted">
+  * Grafik kepatuhan dihitung berdasarkan <b className="text-buma-text">jumlah garis</b>, sedangkan grafik distribusi dihitung dari <b className="text-buma-text">actual point (height_m)</b>.
+</div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
@@ -1502,12 +1740,17 @@ async function exportExcelCurrentView() {
             ) : (
               <>
                 <DonutCompliance ok={compliance.ok} bad={compliance.bad} />
-                <TrendBar
-                  title={mode === "DAILY" ? "Trend Harian" : "Trend Mingguan"}
-                  subtitle={mode === "DAILY" ? "Agregasi jumlah garis per tanggal." : "Agregasi jumlah garis per week."}
-                  data={trendData}
-                  empty={trendData.length === 0}
-                />
+<ActualDistributionChart
+  shovelRows={actualDist.shovel}
+  backhoeRows={actualDist.backhoe}
+  empty={
+    actualDistLoading ||
+    (
+      actualDist.shovel.reduce((s, x) => s + x.count, 0) +
+      actualDist.backhoe.reduce((s, x) => s + x.count, 0)
+    ) === 0
+  }
+/>
               </>
             )}
           </div>
