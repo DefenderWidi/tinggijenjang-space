@@ -109,12 +109,14 @@ export default function Topbar() {
   }, [acctOpen])
 
   return (
-    <header className="sticky top-0 z-50 border-b border-buma-border bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/40">
-      {/* subtle accent bar */}
-      <div className="h-1 w-full bg-gradient-to-r from-buma-green/70 via-buma-green/35 to-buma-blue/30" />
+  <header className="sticky top-0 z-50 border-b border-buma-border bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/40">
+  <div className="pointer-events-none absolute inset-0 bg-gradient-to-l from-buma-green/[0.1] via-transparent to-transparent" />
 
-      {/* Top row */}
-      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3">
+  {/* subtle accent bar */}
+  <div className="relative h-1 w-full bg-gradient-to-r from-buma-green/60 via-buma-green/25 to-buma-blue/20" />
+
+  {/* Top row */}
+  <div className="relative mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3">
         {/* Left: Logo & System */}
         <div className="flex items-center gap-3">
           <div className="flex items-center">

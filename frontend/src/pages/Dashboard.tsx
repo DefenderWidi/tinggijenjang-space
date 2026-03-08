@@ -81,7 +81,8 @@ function mapInspection(r: any): InspectionRow {
       : r.reviewStatus === "VALID" || r.reviewStatus === "REJECT" || r.reviewStatus === "PENDING"
         ? r.reviewStatus
         : "PENDING") as ReviewStatus,
-    refUnit: r.ref_unit ?? r.refUnit ?? null,
+   refUnit:
+String(r.ref_unit ?? r.refUnit ?? "").trim() || null,
     refMeter: r.ref_meter ?? r.refMeter ?? null,
   }
 }
@@ -405,14 +406,12 @@ function ActualDistributionChart({
 
   function Section({
     title,
-    subtitle,
     total,
     data,
     fill,
     legendLabel,
   }: {
     title: string
-    subtitle: string
     total: number
     data: Array<{ label: string; value: number }>
     fill: string
@@ -425,7 +424,6 @@ function ActualDistributionChart({
             <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
               {title}
             </div>
-            <div className="mt-1 text-[11px] text-buma-muted">{subtitle}</div>
           </div>
 
           <div className="rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-[11px] font-extrabold text-buma-muted">
@@ -478,15 +476,6 @@ function ActualDistributionChart({
               Distribusi tinggi actual per titik berdasarkan tipe alat referensi.
             </div>
           </div>
-
-          <div className="rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-xs text-buma-muted">
-            <span className="font-semibold text-buma-text">Sumber: </span>
-            Actual point (height_m)
-          </div>
-        </div>
-
-        <div className="mt-2 rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-[11px] text-buma-muted">
-          Shovel dan Backhoe dipisahkan agar distribusi bucket masing-masing alat lebih jelas.
         </div>
 
        {loading ? (
@@ -507,7 +496,6 @@ function ActualDistributionChart({
           <div className="mt-4 grid gap-4 xl:grid-cols-2">
             <Section
               title="Shovel"
-              subtitle="Bucket: di bawah 7 m, 7-8 m, 8-9 m, di atas 9 m"
               total={totalShovel}
               data={shovelData}
               fill="#15803D"
@@ -515,7 +503,6 @@ function ActualDistributionChart({
             />
             <Section
               title="Backhoe"
-              subtitle="Bucket: di bawah 3 m, 3-4 m, 4-5 m, lebih dari 5 m"
               total={totalBackhoe}
               data={backhoeData}
               fill="#2563EB"
@@ -774,7 +761,12 @@ function ReviewDetailModal({
       const j1 = await fetchInspectionDetail(row.id, ac.signal)
       const data1 = j1?.data ?? j1
 
-      const inspectionFromDetail = data1 ? mapInspection(data1) : base
+      const mapped = data1 ? mapInspection(data1) : base
+
+const inspectionFromDetail = {
+  ...mapped,
+  refUnit: mapped.refUnit ?? base.refUnit,
+}
 
       const notes =
         (data1?.review_notes ??
@@ -820,7 +812,8 @@ function ReviewDetailModal({
   const active = detail?.inspection ?? row
 
   // ✅ baru standardM
-  const standardM = getLimitM(active.refUnit ?? null)
+  const standardM =
+  active.refUnit ? getLimitM(active.refUnit) : 0
 
   const { date, time } = formatDateTime(active.inspectedAt)
 
@@ -1149,35 +1142,39 @@ function ReviewDetailModal({
                       Selisih
                     </div>
 
-                    <div
-                      className={cls(
-                        "text-[12px] font-extrabold tabular-nums",
-                        delta == null
-                          ? "text-buma-muted"
-                          : delta > 0
-                            ? "text-red-600"
-                            : "text-buma-green"
-                      )}
-                    >
-                      {delta == null ? "—" : fmtSigned(delta)}
-                    </div>
+   <div
+  className={cls(
+    "text-[12px] font-extrabold tabular-nums",
+    delta == null
+      ? "text-buma-muted"
+      : actual !== null && actual === standardM
+        ? "text-buma-green"
+        : "text-red-600"
+  )}
+>
+  {delta == null ? "—" : fmtSigned(delta)}
+</div>
                   </div>
 
                 </div>
 
-                <div className="mt-2 text-[10px] text-buma-muted leading-relaxed">
-                  {delta == null ? (
-                    <>Selisih tidak tersedia karena data tinggi belum lengkap.</>
-                  ) : delta > 0 ? (
-                    <>
-                      Actual <b className="text-buma-text">melebihi</b> limit ({fmtSigned(delta)})
-                    </>
-                  ) : (
-                    <>
-                      Actual <b className="text-buma-text">di bawah</b> limit ({fmtSigned(delta)})
-                    </>
-                  )}
-                </div>
+            <div className="mt-2 text-[10px] text-buma-muted leading-relaxed">
+  {delta == null ? (
+    <>Selisih tidak tersedia karena data tinggi belum lengkap.</>
+ ) : actual !== null && actual === standardM ? (
+    <>
+      Actual <b className="text-buma-green">tepat pada</b> standar limit ({fmtSigned(delta)})
+    </>
+ ) : actual !== null && actual > standardM ? (
+    <>
+      Actual <b className="text-red-600">melebihi</b> limit ({fmtSigned(delta)})
+    </>
+  ) : (
+    <>
+      Actual <b className="text-red-600">di bawah</b> limit ({fmtSigned(delta)})
+    </>
+  )}
+</div>
 
               </div>
             </div>
@@ -1398,6 +1395,24 @@ async function fetchLinesRaw(
   }
 }
 
+async function fetchPhotoUrl(inspectionId: string): Promise<string | null> {
+  try {
+    const r = await fetch(
+      `${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}`
+    )
+    if (!r.ok) return null
+
+    const j = await r.json()
+    const data = Array.isArray(j?.data) ? j.data : j?.data ? [j.data] : []
+
+    const m = data?.[0]
+    const url = m?.image_url ?? m?.imageUrl ?? null
+    return url ? String(url) : null
+  } catch {
+    return null
+  }
+}
+
 async function exportExcelCurrentView() {
   if (isExporting) return
   if (!inspections.length) return
@@ -1407,23 +1422,45 @@ async function exportExcelCurrentView() {
     setExportMsg("Menyiapkan data export...")
 
     // ===== Sheet 1: Inspections (summary) =====
-    const inspectionsSheet = inspections.map((x) => {
-      const { date, time } = formatDateTime(x.inspectedAt)
-      return {
-        inspection_id: x.id,
-        tanggal: date,
-        waktu: mode === "DAILY" ? time : "—",
-        inspector: x.inspector,
-        shift: x.shift,
-        pelaksanaan: x.pelaksanaan,
-        front: x.front,
-        max_height_m: x.maxHeightM,
-        lines_count: x.linesCount,
-        lines_ok_count: x.linesOkCount,
-        review_status: x.reviewStatus,
-        reviewed_by: x.reviewedBy ?? "",
-      }
-    })
+    const inspectionsSheet = await Promise.all(
+  inspections.map(async (x) => {
+    const { date, time } = formatDateTime(x.inspectedAt)
+
+    const photoUrl = await fetchPhotoUrl(x.id)
+
+    return {
+      inspection_id: x.id,
+      tanggal: date,
+      waktu: mode === "DAILY" ? time : "—",
+
+      inspector: x.inspector,
+      shift: x.shift,
+      pelaksanaan: x.pelaksanaan,
+      front: x.front,
+
+      ref_unit: x.refUnit ?? "",
+      ref_type: (x.refUnit ?? "").startsWith("S")
+        ? "Shovel"
+        : (x.refUnit ?? "").startsWith("B")
+        ? "Backhoe"
+        : "",
+
+      limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
+
+      max_height_m: x.maxHeightM,
+
+      lines_count: x.linesCount,
+      lines_ok_count: x.linesOkCount,
+
+      compliance_pct: pctOk(x.linesOkCount, x.linesCount),
+
+      review_status: x.reviewStatus,
+      reviewed_by: x.reviewedBy ?? "",
+
+      photo_url: photoUrl ?? "",
+    }
+  })
+)
 
     // ===== Sheet 2: Lines (per titik) =====
     const allLines: Array<any> = []
@@ -1439,12 +1476,36 @@ async function exportExcelCurrentView() {
           if (!linesRaw.length) {
             return [{ inspection_id: x.id, label: "", height_m: "", ok: "" }]
           }
-          return linesRaw.map((ln) => ({
-            inspection_id: x.id,
-            label: ln.label,
-            height_m: ln.height_m ?? "",
-            ok: ln.ok === true ? "TRUE" : ln.ok === false ? "FALSE" : "",
-          }))
+return linesRaw.map((ln) => ({
+  inspection_id: x.id,
+
+  ref_unit: x.refUnit ?? "",
+  ref_type: (x.refUnit ?? "").startsWith("S")
+    ? "Shovel"
+    : (x.refUnit ?? "").startsWith("B")
+    ? "Backhoe"
+    : "",
+
+  front: x.front,
+
+  point_label: ln.label,
+
+  height_m: ln.height_m ?? "",
+
+  limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
+
+  delta_m:
+    ln.height_m != null && x.refUnit
+      ? Number(ln.height_m) - getLimitM(x.refUnit)
+      : "",
+
+  ok:
+    ln.ok === true
+      ? "TRUE"
+      : ln.ok === false
+      ? "FALSE"
+      : "",
+}))
         })
       )
 
@@ -1453,12 +1514,17 @@ async function exportExcelCurrentView() {
 
     // ===== Build workbook =====
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(inspectionsSheet), "Inspections")
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(allLines.length ? allLines : [{ inspection_id: "" }]),
-      "Lines"
-    )
+  XLSX.utils.book_append_sheet(
+  wb,
+  XLSX.utils.json_to_sheet(inspectionsSheet),
+  "Inspections_Summary"
+)
+
+XLSX.utils.book_append_sheet(
+  wb,
+  XLSX.utils.json_to_sheet(allLines),
+  "Lines_Detail"
+)
 
     // ===== filename: sesuai mode & filter =====
     const period =
@@ -1680,10 +1746,6 @@ async function exportExcelCurrentView() {
                   Weekly
                 </button>
               </div>
-
-              <div className="rounded-xl border border-buma-border bg-white px-3 py-2 text-xs text-buma-muted">
-                Mode mempengaruhi grafik & tabel.
-              </div>
             </div>
 
             {/* Date/Month filter */}
@@ -1740,7 +1802,7 @@ async function exportExcelCurrentView() {
       ) : isEmpty ? (
         <EmptyState
           title="Tidak ada data pada periode ini"
-          desc="Ubah range tanggal (Daily) atau bulan (Weekly). Jika data belum masuk, pastikan ingestion berjalan."
+          desc="Ubah range tanggal (Daily) atau bulan (Weekly)."
         />
       ) : (
         <>
