@@ -299,7 +299,7 @@ function DonutCompliance({ ok, bad }: { ok: number; bad: number }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">
-              Kepatuhan Tinggi Jenjang
+              Kesesuaian Titik
             </div>
             <div className="mt-1 text-sm text-buma-muted">
               Perbandingan <b className="text-buma-text">jumlah garis</b> yang sesuai vs tidak sesuai.
@@ -470,7 +470,7 @@ function ActualDistributionChart({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">
-              Distribusi Titik Actual
+              Kesesuaian Tinggi Jenjang
             </div>
             <div className="mt-1 text-sm text-buma-muted">
               Distribusi tinggi actual per titik berdasarkan tipe alat referensi.
