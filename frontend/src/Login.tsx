@@ -28,55 +28,58 @@ export default function Login() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [showPass, setShowPass] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const canProceed = useMemo(() => {
     return username.trim().length > 0 && password.trim().length > 0
   }, [username, password])
 
-  async function handleLogin() {
-    if (!canProceed) {
-      alert("Username dan password wajib diisi.")
+ async function handleLogin() {
+  if (!canProceed || loading) return
+
+  setLoading(true)
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        username: username.trim(),
+        password: password.trim(),
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      alert(data?.error || "Login gagal")
+      setLoading(false)
       return
     }
 
-    try {
-     const res = await fetch(`${API_BASE}/api/auth/login`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  credentials: "include",
-  body: JSON.stringify({
-    username: username.trim(),
-    password: password.trim(),
-  }),
-})
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        alert(data?.error || "Login gagal")
-        return
-      }
-
-      const user = data?.user
-      if (!user?.username || !user?.role) {
-        alert("Respons login tidak valid")
-        return
-      }
-
-      saveBaseSession({
-        id: user.id,
-        username: user.username,
-        accountRole: user.role,
-      })
-
-      nav("/select-role", { replace: true })
-    } catch (err) {
-      console.error("login error:", err)
-      alert("Tidak dapat terhubung ke server")
+    const user = data?.user
+    if (!user?.username || !user?.role) {
+      alert("Respons login tidak valid")
+      setLoading(false)
+      return
     }
+
+    saveBaseSession({
+      id: user.id,
+      username: user.username,
+      accountRole: user.role,
+    })
+
+    nav("/select-role", { replace: true })
+  } catch (err) {
+    console.error("login error:", err)
+    alert("Tidak dapat terhubung ke server")
+    setLoading(false)
   }
+}
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -196,6 +199,7 @@ export default function Login() {
                       Username
                     </label>
                     <input
+                      disabled={loading}
                       className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none transition focus:border-buma-green/60 focus:ring-2 focus:ring-buma-green/25"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
@@ -208,6 +212,7 @@ export default function Login() {
 
                     <div className="relative mt-2">
                       <input
+                        disabled={loading}
                         type={showPass ? "text" : "password"}
                         className="w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 pr-10 text-sm text-white placeholder:text-white/40 outline-none transition focus:border-buma-green/60 focus:ring-2 focus:ring-buma-green/25"
                         value={password}
@@ -219,6 +224,7 @@ export default function Login() {
                       />
                       <button
                         type="button"
+                        disabled={loading}
                         onClick={() => setShowPass((v) => !v)}
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/80 transition hover:bg-white/10 hover:text-white"
                         title={showPass ? "Sembunyikan password" : "Tampilkan password"}
@@ -227,25 +233,32 @@ export default function Login() {
                       </button>
                     </div>
 
-                    <button
-                      onClick={handleLogin}
-                      disabled={!canProceed}
-                      className="
-                        mt-6 w-full rounded-xl
-                        bg-gradient-to-r from-[#15803D] to-[#22A745]
-                        px-4 py-2.5 text-sm font-extrabold text-white
-                        transition-all duration-300 ease-out
-                        hover:from-[#166534] hover:to-[#16A34A]
-                        hover:shadow-[0_12px_28px_rgba(34,167,69,0.30)]
-                        hover:-translate-y-[2px]
-                        active:translate-y-[0px]
-                        focus:outline-none focus:ring-2 focus:ring-[#22A745]/45
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        disabled:hover:shadow-none disabled:hover:translate-y-0
-                      "
-                    >
-                      Masuk
-                    </button>
+                 <button
+  onClick={handleLogin}
+  disabled={!canProceed || loading}
+  className="
+    mt-6 w-full rounded-xl
+    bg-gradient-to-r from-[#15803D] to-[#22A745]
+    px-4 py-2.5 text-sm font-extrabold text-white
+    transition-all duration-300 ease-out
+    hover:from-[#166534] hover:to-[#16A34A]
+    hover:shadow-[0_12px_28px_rgba(34,167,69,0.30)]
+    hover:-translate-y-[2px]
+    active:translate-y-[0px]
+    focus:outline-none focus:ring-2 focus:ring-[#22A745]/45
+    disabled:opacity-50 disabled:cursor-not-allowed
+    disabled:hover:shadow-none disabled:hover:translate-y-0
+  "
+>
+  {loading ? (
+    <span className="flex items-center justify-center gap-2">
+      <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+      Memproses...
+    </span>
+  ) : (
+    "Masuk"
+  )}
+</button>
                   </div>
                 </motion.div>
 
