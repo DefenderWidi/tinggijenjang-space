@@ -2,10 +2,20 @@ import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 
-type Role = "FIELD" | "PJA" | "EVALUATOR"
+type ActiveRole = "FIELD" | "PJA" | "EVALUATOR"
+type AccountRole = "USER" | "ADMIN"
+
 const LS_KEY = "mt_session_v1"
 
-function getSession(): any | null {
+type SessionData = {
+  id?: string | null
+  username?: string
+  accountRole?: AccountRole
+  activeRole?: ActiveRole | null
+  ts?: number
+}
+
+function getSession(): SessionData | null {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return null
@@ -15,7 +25,7 @@ function getSession(): any | null {
   }
 }
 
-function saveSessionMerge(patch: Record<string, any>) {
+function saveSessionMerge(patch: Partial<SessionData>) {
   const prev = getSession() || {}
   localStorage.setItem(
     LS_KEY,
@@ -27,7 +37,7 @@ function saveSessionMerge(patch: Record<string, any>) {
   )
 }
 
-function roleLabel(role: Role) {
+function roleLabel(role: ActiveRole) {
   switch (role) {
     case "FIELD":
       return "Inspector Lapangan"
@@ -40,17 +50,19 @@ function roleLabel(role: Role) {
 
 export default function SelectRole() {
   const nav = useNavigate()
-  const [selectedRole, setSelectedRole] = useState<Role>("FIELD")
+  const [selectedRole, setSelectedRole] = useState<ActiveRole>("FIELD")
 
   const session = useMemo(() => getSession(), [])
-  const username = session?.username as string | undefined
+  const username = session?.username
+  const accountRole = session?.accountRole
+  const isAdminAccount = accountRole === "ADMIN"
 
   useEffect(() => {
     if (!username) nav("/", { replace: true })
   }, [username, nav])
 
-  function handlePickRole(role: Role) {
-    saveSessionMerge({ role })
+  function handlePickRole(role: ActiveRole) {
+    saveSessionMerge({ activeRole: role })
 
     if (role === "FIELD") return nav("/measure", { replace: true })
     if (role === "PJA") return nav("/pja", { replace: true })
@@ -134,6 +146,11 @@ export default function SelectRole() {
                     <div className="text-xl font-extrabold text-white">Pilih Role</div>
                     <div className="mt-1 text-sm text-white/75">
                       Login as <span className="font-semibold text-white">{username}</span>
+                      {isAdminAccount ? (
+                        <span className="ml-2 inline-flex rounded-full border border-buma-green/35 bg-buma-green/15 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                          ADMIN
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
@@ -175,30 +192,91 @@ export default function SelectRole() {
                     />
                   </motion.div>
 
-                  <div className="mt-4 flex items-center justify-between">
-                    <button
-                      onClick={() => nav("/", { replace: true })}
-                      className="
-                        group inline-flex items-center gap-2
-                        rounded-xl border border-white/20
-                        bg-white/10 px-6 py-2
-                        text-xs font-extrabold text-white/85
-                        backdrop-blur-md
-                        transition-all duration-300 ease-out
-                        hover:bg-white/20 hover:border-white/35
-                        hover:-translate-y-[2px]
-                        hover:shadow-[0_8px_20px_rgba(255,255,255,0.15)]
-                        active:translate-y-0
-                      "
-                    >
-                      ← Kembali
-                    </button>
+                  <div className="mt-4 space-y-3">
+                   {isAdminAccount && (
+  <motion.button
+    type="button"
+    onClick={() => nav("/admin", { replace: true })}
+    whileHover={{ scale: 1.01 }}
+    whileTap={{ scale: 0.985 }}
+    className="
+      group relative w-full overflow-hidden
+      rounded-2xl border border-buma-green/35
+      bg-white/10 px-3 py-2.5
+      text-left backdrop-blur-xl
+      transition-all duration-300
+      hover:bg-white/14 hover:border-buma-green/55
+      hover:shadow-[0_8px_20px_rgba(34,167,69,0.18)]
+    "
+  >
+    <div className="relative flex items-center gap-3">
 
-                    <div className="text-xs text-white/70">
-                      Role terpilih:{" "}
-                      <span className="font-semibold text-white">
-                        {roleLabel(selectedRole)}
-                      </span>
+      {/* icon */}
+      <div className="
+        flex h-10 w-10 shrink-0 items-center justify-center
+        rounded-xl border border-white/15
+        bg-white/10 text-white
+      ">
+       <svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  className="text-white"
+>
+  <path
+    fill="currentColor"
+    d="M12 23C6.443 21.765 2 16.522 2 11V5l10-4l10 4v6c0 5.524-4.443 10.765-10 12M4 6v5a10.58 10.58 0 0 0 8 10a10.58 10.58 0 0 0 8-10V6l-8-3Z"
+  />
+  <circle cx="12" cy="8.5" r="2.5" fill="currentColor" />
+  <path
+    fill="currentColor"
+    d="M7 15a5.78 5.78 0 0 0 5 3a5.78 5.78 0 0 0 5-3c-.025-1.896-3.342-3-5-3c-1.667 0-4.975 1.104-5 3"
+  />
+</svg>
+      </div>
+
+      {/* title */}
+      <div className="flex-1 text-sm font-extrabold text-white">
+        Pusat Admin
+      </div>
+
+      {/* badge */}
+      <div className="
+        rounded-lg border border-buma-green/40
+        bg-buma-green/18 px-2 py-1
+        text-[10px] font-extrabold tracking-widest text-white
+      ">
+        ADMIN
+      </div>
+    </div>
+  </motion.button>
+)}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <button
+                        onClick={() => nav("/login", { replace: true })}
+                        className="
+        group inline-flex items-center justify-center gap-2
+        rounded-xl border border-white/20
+        bg-white/10 px-6 py-2
+        text-xs font-extrabold text-white/85
+        backdrop-blur-md
+        transition-all duration-300 ease-out
+        hover:bg-white/20 hover:border-white/35
+        hover:-translate-y-[2px]
+        hover:shadow-[0_8px_20px_rgba(255,255,255,0.15)]
+        active:translate-y-0
+      "
+                      >
+                        ← Kembali
+                      </button>
+
+                      <div className="text-xs text-white/70">
+                        Role terpilih:{" "}
+                        <span className="font-semibold text-white">
+                          {roleLabel(selectedRole)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -243,10 +321,9 @@ function RoleCard({
         rounded-3xl border p-4
         backdrop-blur-xl overflow-hidden
         transition-all duration-300
-        ${
-          active
-            ? "border-[#22A745]/60 bg-white/20 shadow-[0_0_28px_rgba(34,167,69,0.22)]"
-            : "border-white/20 bg-white/12 hover:bg-white/18"
+        ${active
+          ? "border-[#22A745]/60 bg-white/20 shadow-[0_0_28px_rgba(34,167,69,0.22)]"
+          : "border-white/20 bg-white/12 hover:bg-white/18"
         }
       `}
     >
@@ -296,10 +373,9 @@ function RoleCard({
               className={`
                 shrink-0 rounded-xl px-3 py-1.5 text-[11px]
                 font-extrabold tracking-widest border
-                ${
-                  active
-                    ? "bg-[#22A745]/22 text-white border-[#22A745]/55"
-                    : "bg-white/10 text-white/85 border-white/20"
+                ${active
+                  ? "bg-[#22A745]/22 text-white border-[#22A745]/55"
+                  : "bg-white/10 text-white/85 border-white/20"
                 }
               `}
             >
@@ -319,10 +395,9 @@ function RoleCard({
       <div
         className={`
           pointer-events-none absolute inset-x-0 bottom-0 h-[2px]
-          ${
-            active
-              ? "bg-gradient-to-r from-transparent via-[#22A745]/70 to-transparent"
-              : "bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-60"
+          ${active
+            ? "bg-gradient-to-r from-transparent via-[#22A745]/70 to-transparent"
+            : "bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-60"
           }
         `}
       />

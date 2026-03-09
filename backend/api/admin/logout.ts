@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
-import { clearAdminCookie } from "../_lib/adminAuth.js"
+import { clearAuthCookie } from "../_lib/adminAuth.js"
 
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || ""
@@ -24,6 +24,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(200).end()
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" })
 
-  clearAdminCookie(res)
+clearAuthCookie(res)
   return res.status(200).json({ ok: true })
 }

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
 import { supabaseAdmin } from "../_lib/supabaseAdmin.js"
 import { verifyPassword } from "../_lib/password.js"
-import { setAdminCookie } from "../_lib/adminAuth.js"
+import { setAuthCookie } from "../_lib/adminAuth.js"
 
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || ""
@@ -77,8 +77,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!ok) {
       return res.status(401).json({ error: "Username atau password salah" })
     }
-
-    setAdminCookie(res)
+    
+setAuthCookie(res, {
+  id: user.id,
+  username: user.username,
+  role: user.role,
+})
 
     return res.status(200).json({
       ok: true,

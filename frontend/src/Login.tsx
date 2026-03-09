@@ -5,13 +5,18 @@ import { motion } from "framer-motion"
 const LS_KEY = "mt_session_v1"
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 
-function saveBaseSession(payload: { username: string; role: string; id?: string }) {
+function saveBaseSession(payload: {
+  username: string
+  accountRole: string
+  id?: string
+}) {
   localStorage.setItem(
     LS_KEY,
     JSON.stringify({
       id: payload.id ?? null,
       username: payload.username,
-      role: payload.role,
+      accountRole: payload.accountRole,
+      activeRole: null,
       ts: Date.now(),
     })
   )
@@ -28,49 +33,50 @@ export default function Login() {
     return username.trim().length > 0 && password.trim().length > 0
   }, [username, password])
 
-async function handleLogin() {
-  if (!canProceed) {
-    alert("Username dan password wajib diisi.")
-    return
-  }
-
-  try {
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        username: username.trim(),
-        password: password.trim(),
-      }),
-    })
-
-    const data = await res.json()
-
-    if (!res.ok) {
-      alert(data?.error || "Login gagal")
+  async function handleLogin() {
+    if (!canProceed) {
+      alert("Username dan password wajib diisi.")
       return
     }
 
-    const user = data?.user
-    if (!user?.username || !user?.role) {
-      alert("Respons login tidak valid")
-      return
+    try {
+     const res = await fetch(`${API_BASE}/api/auth/login`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  credentials: "include",
+  body: JSON.stringify({
+    username: username.trim(),
+    password: password.trim(),
+  }),
+})
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data?.error || "Login gagal")
+        return
+      }
+
+      const user = data?.user
+      if (!user?.username || !user?.role) {
+        alert("Respons login tidak valid")
+        return
+      }
+
+      saveBaseSession({
+        id: user.id,
+        username: user.username,
+        accountRole: user.role,
+      })
+
+      nav("/select-role", { replace: true })
+    } catch (err) {
+      console.error("login error:", err)
+      alert("Tidak dapat terhubung ke server")
     }
-
-    saveBaseSession({
-      id: user.id,
-      username: user.username,
-      role: user.role,
-    })
-
-    nav("/select-role", { replace: true })
-  } catch (err) {
-    console.error("login error:", err)
-    alert("Tidak dapat terhubung ke server")
   }
-}
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -79,12 +85,12 @@ async function handleLogin() {
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/LoginBackground.jpeg')" }}
       />
-    <motion.div
-  className="absolute inset-0 bg-black/60"
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 1 }}
-  transition={{ duration: 0.6, ease: "easeOut" }}
-/>
+      <motion.div
+        className="absolute inset-0 bg-black/60"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+      />
 
       {/* soft accents (BUMA vibe, tetap simpel) */}
       <div className="pointer-events-none absolute inset-0">
@@ -95,7 +101,7 @@ async function handleLogin() {
       <div className="relative z-10 flex min-h-screen items-center">
         <div className="mx-auto w-full max-w-[1600px] px-4">
           <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
-            {/* MOBILE HEADER (branding tetap muncul, compact) */}
+            {/* MOBILE HEADER */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -119,14 +125,13 @@ async function handleLogin() {
                   </div>
                 </div>
 
-                {/* mobile tetap 1 baris */}
                 <h1 className="mt-4 text-[20px] font-extrabold leading-tight text-white">
                   Monitoring <span className="text-buma-green">Tinggi Jenjang</span>
                 </h1>
               </div>
             </motion.div>
 
-            {/* LEFT PANEL (DESKTOP) - digeser ke kanan agar sejajar dengan card kanan */}
+            {/* LEFT PANEL */}
             <div className="hidden lg:flex flex-col justify-center lg:pl-14 xl:pl-20">
               <div className="max-w-lg">
                 <div className="mb-5 inline-flex items-center gap-3 rounded-3xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-xl">
@@ -146,10 +151,8 @@ async function handleLogin() {
                 </div>
 
                 <div className="relative">
-                  {/* garis hijau lebih panjang */}
                   <div className="absolute -left-5 top-1 hidden h-24 w-1 rounded-full bg-gradient-to-b from-buma-green via-buma-green/70 to-transparent lg:block" />
 
-                  {/* desktop pakai BR */}
                   <h1 className="text-[36px] xl:text-[42px] font-extrabold text-white leading-[1.05] tracking-tight">
                     Monitoring
                     <br className="hidden lg:block" />
@@ -176,7 +179,6 @@ async function handleLogin() {
                   transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
                   className="relative w-full overflow-hidden rounded-3xl border border-white/20 bg-white/14 p-6 shadow-2xl backdrop-blur-xl"
                 >
-                  {/* subtle glass layer (simple) */}
                   <div className="pointer-events-none absolute inset-0">
                     <div className="absolute inset-0 bg-gradient-to-br from-white/12 via-transparent to-transparent" />
                     <div className="absolute inset-0 ring-1 ring-white/10" />
@@ -190,7 +192,6 @@ async function handleLogin() {
                       </div>
                     </div>
 
-                    {/* Username */}
                     <label className="block text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
                       Username
                     </label>
@@ -201,7 +202,6 @@ async function handleLogin() {
                       placeholder="Masukkan username"
                     />
 
-                    {/* Password */}
                     <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
                       Password
                     </label>
@@ -249,7 +249,6 @@ async function handleLogin() {
                   </div>
                 </motion.div>
 
-                {/* MOBILE FOOTER (di bawah kotak login) */}
                 <div className="mt-3 text-center text-[11px] text-white/55 lg:hidden">
                   PT Bukit Makmur Mandiri Utama
                 </div>
@@ -261,8 +260,6 @@ async function handleLogin() {
     </div>
   )
 }
-
-/* ===== ICONS ===== */
 
 function EyeIcon() {
   return (

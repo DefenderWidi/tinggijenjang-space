@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
 import { supabaseAdmin } from "../_lib/supabaseAdmin.js"
 import { verifyPassword } from "../_lib/password.js"
+import { setAuthCookie } from "../_lib/adminAuth.js"
 
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || ""
@@ -16,7 +17,10 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Vary", "Origin")
   res.setHeader("Access-Control-Allow-Credentials", "true")
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  )
   res.setHeader("Access-Control-Max-Age", "86400")
 }
 
@@ -37,11 +41,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res)
 
   if (req.method === "OPTIONS") return res.status(200).end()
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" })
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" })
+  }
 
   try {
     const body = parseBody(req)
-    if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
+    if (body === null) {
+      return res.status(400).json({ error: "Invalid JSON body" })
+    }
 
     const username = String(body.username ?? "").trim()
     const password = String(body.password ?? "").trim()
@@ -62,6 +70,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const ok = verifyPassword(password, user.password_hash)
     if (!ok) return res.status(401).json({ error: "Username atau password salah" })
+
+    setAuthCookie(res, {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+    })
 
     return res.status(200).json({
       user: {
