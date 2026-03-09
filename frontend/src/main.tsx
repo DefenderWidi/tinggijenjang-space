@@ -8,7 +8,7 @@ import SelectRole from "./SelectRole"
 import Measure from "./pages/Measure"
 import PjaDashboard from "./pages/PjaDashboard"
 import EvaluatorDashboard from "./pages/Dashboard"
-import Admin from "./pages/admin"
+import Admin from "./pages/Admin"
 
 type Role = "FIELD" | "PJA" | "EVALUATOR"
 
