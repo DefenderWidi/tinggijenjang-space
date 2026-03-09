@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       supabaseAdmin.from("inspection_measures").select("*", { count: "exact", head: true }),
     ])
 
-    const bucketName = process.env.PHOTO_BUCKET || "inspection-photos"
+    const bucketName = process.env.PHOTO_BUCKET || "measure-photos"
     const photoCount = await countFilesRecursive(bucketName)
 
     return res.status(200).json({
