@@ -4,13 +4,11 @@ import crypto from "crypto"
 const COOKIE_NAME = "mt_admin_auth"
 
 function getAdminToken() {
-  const user = process.env.ADMIN_USERNAME || ""
-  const pass = process.env.ADMIN_PASSWORD || ""
   const secret = process.env.ADMIN_SESSION_SECRET || "dev-secret"
 
   return crypto
     .createHash("sha256")
-    .update(`${user}:${pass}:${secret}`)
+    .update(`ADMIN:${secret}`)
     .digest("hex")
 }
 
