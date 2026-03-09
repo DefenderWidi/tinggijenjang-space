@@ -80,7 +80,6 @@ export default function Admin() {
 
     const data = await res.json()
     if (!res.ok) throw new Error(data?.error || "Gagal mengambil user")
-
     setUsers(data?.data || [])
   }
 
@@ -118,7 +117,7 @@ export default function Admin() {
     }
   }
 
-  async function handleRefreshStats() {
+  async function handleRefreshAll() {
     setErr("")
     setMsg("")
     setBusy(true)
@@ -373,49 +372,217 @@ export default function Admin() {
     <>
       <AdminTopbar />
       <AppLayout hideTopbar>
-        <div className="mx-auto w-full max-w-6xl p-4 sm:p-6">
-          <div className="rounded-[32px] border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 p-4 shadow-[0_24px_70px_rgba(15,23,42,0.10)] sm:p-6">
-            <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_55px_rgba(15,23,42,0.08)] sm:p-6">
-              <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-emerald-700">
-                    System Control
-                  </div>
-
-                  <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900">
-                    Admin Panel
-                  </h1>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Kontrol operasional internal untuk monitoring data, storage,
-                    user, dan reset sistem.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={handleRefreshStats}
-                    disabled={busy}
-                    className="rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    Refresh
-                  </button>
-                </div>
+        <div className="mx-auto w-full max-w-7xl p-4 sm:p-6">
+          <div className="mb-5 flex flex-col gap-3 rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.10)] sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div>
+              <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-emerald-700">
+                Admin Workspace
               </div>
 
-              {err ? (
-                <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                  {err}
-                </div>
-              ) : null}
+              <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900">
+                Admin Panel
+              </h1>
 
-              {msg ? (
-                <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-                  {msg}
-                </div>
-              ) : null}
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                Kelola user sistem, pantau isi database, dan lakukan reset operasional
+                dari satu dashboard yang rapi.
+              </p>
+            </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <button
+              onClick={handleRefreshAll}
+              disabled={busy}
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              Refresh Semua Data
+            </button>
+          </div>
+
+          {err ? (
+            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {err}
+            </div>
+          ) : null}
+
+          {msg ? (
+            <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+              {msg}
+            </div>
+          ) : null}
+
+          <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+            {/* LEFT: USER MANAGEMENT */}
+            <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_55px_rgba(15,23,42,0.08)] sm:p-6">
+              <div className="mb-5">
+                <div className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-sky-700">
+                  User Access Management
+                </div>
+                <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-900">
+                  Kelola Akses User
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Tambah user baru, lihat status user aktif, nonaktifkan akun,
+                  dan reset password bila diperlukan.
+                </p>
+              </div>
+
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+  <div className="mb-4 text-sm font-bold text-slate-800">
+    Tambah User Baru
+  </div>
+
+  <div className="space-y-3">
+    {/* Username */}
+    <input
+      value={newUsername}
+      onChange={(e) => setNewUsername(e.target.value)}
+      placeholder="Username baru"
+      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+    />
+
+    {/* Password */}
+    <input
+      type="text"
+      value={newPassword}
+      onChange={(e) => setNewPassword(e.target.value)}
+      placeholder="Password awal user"
+      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+    />
+
+    {/* Role + Button */}
+    <div className="grid gap-3 sm:grid-cols-2">
+      <select
+        value={newRole}
+        onChange={(e) => setNewRole(e.target.value)}
+        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+      >
+        <option value="USER">USER</option>
+        <option value="ADMIN">ADMIN</option>
+      </select>
+
+      <button
+        onClick={handleCreateUser}
+        disabled={busy}
+        className="rounded-2xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-3 font-extrabold text-white shadow-[0_12px_30px_rgba(5,150,105,0.20)] transition hover:from-[#166534] hover:to-[#16A34A] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        Tambah User
+      </button>
+    </div>
+  </div>
+</div>
+
+              <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-sm font-bold text-slate-800">
+                    Daftar User
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Total user: {users.length}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-white">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600">
+                          Username
+                        </th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600">
+                          Role
+                        </th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600">
+                          Status
+                        </th>
+                        <th className="px-4 py-3 text-right font-bold text-slate-600">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {users.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="px-4 py-8 text-center text-sm text-slate-500"
+                          >
+                            Belum ada user.
+                          </td>
+                        </tr>
+                      ) : (
+                        users.map((u) => {
+                          const active = u.is_active ?? true
+
+                          return (
+                            <tr
+                              key={u.id}
+                              className="border-t border-slate-200 align-top"
+                            >
+                              <td className="px-4 py-3 font-semibold text-slate-800">
+                                {u.username}
+                              </td>
+                              <td className="px-4 py-3 text-slate-700">{u.role}</td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                                    active
+                                      ? "bg-emerald-50 text-emerald-700"
+                                      : "bg-red-50 text-red-700"
+                                  }`}
+                                >
+                                  {active ? "ACTIVE" : "INACTIVE"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex min-w-[210px] flex-wrap justify-end gap-2">
+                                  <button
+                                    onClick={() => handleResetPassword(u)}
+                                    disabled={busy}
+                                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                                  >
+                                    Reset Password
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleToggleUser(u)}
+                                    disabled={busy}
+                                    className={`rounded-xl px-3 py-2 text-xs font-bold text-white transition disabled:opacity-60 ${
+                                      active
+                                        ? "bg-red-600 hover:bg-red-500"
+                                        : "bg-emerald-600 hover:bg-emerald-500"
+                                    }`}
+                                  >
+                                    {active ? "Nonaktifkan" : "Aktifkan"}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            {/* RIGHT: SYSTEM & DATABASE */}
+            <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_55px_rgba(15,23,42,0.08)] sm:p-6">
+              <div className="mb-5">
+                <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-emerald-700">
+                  System & Database
+                </div>
+                <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-900">
+                  Pantau & Reset Data
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Lihat isi database operasional dan lakukan reset data saat
+                  diperlukan.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-[24px] border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm">
                   <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
                     Inspections
@@ -450,159 +617,25 @@ export default function Admin() {
                   <div className="mt-3 text-3xl font-black text-slate-900">
                     {stats?.photoCount ?? 0}
                   </div>
-                  <div className="mt-2 text-xs font-semibold text-slate-500">
+                  <div className="mt-2 break-all text-xs font-semibold text-slate-500">
                     Bucket: {stats?.bucket ?? "-"}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-6 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mt-5 rounded-[24px] border border-red-200 bg-gradient-to-b from-red-50 to-white p-5">
                 <div className="flex flex-col gap-2">
-                  <h2 className="text-xl font-black tracking-tight text-slate-900">
-                    User Management
-                  </h2>
-                  <p className="text-sm leading-6 text-slate-600">
-                    Tambah user baru, lihat daftar user, nonaktifkan user, dan
-                    reset password.
-                  </p>
-                </div>
-
-                <div className="mt-5 grid gap-3 lg:grid-cols-4">
-                  <input
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                    placeholder="Username baru"
-                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  />
-
-                  <input
-                    type="text"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Password awal"
-                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  />
-
-                  <select
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value)}
-                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  >
-                    <option value="USER">USER</option>
-                    <option value="ADMIN">ADMIN</option>
-                  </select>
-
-                  <button
-                    onClick={handleCreateUser}
-                    disabled={busy}
-                    className="rounded-2xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-3 font-extrabold text-white shadow-[0_12px_30px_rgba(5,150,105,0.20)] transition hover:from-[#166534] hover:to-[#16A34A] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Tambah User
-                  </button>
-                </div>
-
-                <div className="mt-6 overflow-hidden rounded-[24px] border border-slate-200">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-bold text-slate-600">
-                            Username
-                          </th>
-                          <th className="px-4 py-3 text-left font-bold text-slate-600">
-                            Role
-                          </th>
-                          <th className="px-4 py-3 text-left font-bold text-slate-600">
-                            Status
-                          </th>
-                          <th className="px-4 py-3 text-right font-bold text-slate-600">
-                            Action
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {users.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={4}
-                              className="px-4 py-6 text-center text-sm text-slate-500"
-                            >
-                              Belum ada user.
-                            </td>
-                          </tr>
-                        ) : (
-                          users.map((u) => {
-                            const active = u.is_active ?? true
-
-                            return (
-                              <tr
-                                key={u.id}
-                                className="border-t border-slate-200"
-                              >
-                                <td className="px-4 py-3 font-semibold text-slate-800">
-                                  {u.username}
-                                </td>
-                                <td className="px-4 py-3 text-slate-700">
-                                  {u.role}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span
-                                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
-                                      active
-                                        ? "bg-emerald-50 text-emerald-700"
-                                        : "bg-red-50 text-red-700"
-                                    }`}
-                                  >
-                                    {active ? "ACTIVE" : "INACTIVE"}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex flex-wrap justify-end gap-2">
-                                    <button
-                                      onClick={() => handleResetPassword(u)}
-                                      disabled={busy}
-                                      className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                                    >
-                                      Reset Password
-                                    </button>
-
-                                    <button
-                                      onClick={() => handleToggleUser(u)}
-                                      disabled={busy}
-                                      className={`rounded-xl px-3 py-1.5 text-xs font-bold text-white transition disabled:opacity-60 ${
-                                        active
-                                          ? "bg-red-600 hover:bg-red-500"
-                                          : "bg-emerald-600 hover:bg-emerald-500"
-                                      }`}
-                                    >
-                                      {active ? "Nonaktifkan" : "Aktifkan"}
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-[28px] border border-red-200 bg-gradient-to-b from-red-50 to-white p-6">
-                <div className="flex flex-col gap-2">
-                  <h2 className="text-xl font-black tracking-tight text-red-700">
+                  <h3 className="text-xl font-black tracking-tight text-red-700">
                     Danger Zone
-                  </h2>
-                  <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                  </h3>
+                  <p className="text-sm leading-6 text-slate-600">
                     Aksi ini akan menghapus seluruh data operasional dan semua
                     file photo pada bucket storage. Pastikan data penting sudah
                     dibackup sebelum melanjutkan.
                   </p>
                 </div>
 
-                <div className="mt-5 max-w-md">
+                <div className="mt-5">
                   <label className="mb-1.5 block text-sm font-bold text-slate-800">
                     Ketik <span className="text-red-600">RESET</span> untuk
                     konfirmasi
@@ -618,12 +651,12 @@ export default function Admin() {
                 <button
                   onClick={handleReset}
                   disabled={busy}
-                  className="mt-4 rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-[0_12px_30px_rgba(220,38,38,0.20)] transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-4 w-full rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-[0_12px_30px_rgba(220,38,38,0.20)] transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {busy ? "Memproses..." : "Reset Operasional + Hapus Photo"}
                 </button>
               </div>
-            </div>
+            </section>
           </div>
         </div>
       </AppLayout>
