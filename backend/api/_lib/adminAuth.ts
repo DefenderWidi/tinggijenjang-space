@@ -4,26 +4,25 @@ import crypto from "crypto"
 const COOKIE_NAME = "mt_admin_auth"
 
 function getAdminToken() {
-  const user = process.env.ADMIN_USERNAME || ""
-  const pass = process.env.ADMIN_PASSWORD || ""
   const secret = process.env.ADMIN_SESSION_SECRET || "dev-secret"
+
   return crypto
     .createHash("sha256")
-    .update(`${user}:${pass}:${secret}`)
+    .update(`ADMIN:${secret}`)
     .digest("hex")
 }
 
 export function setAdminCookie(res: VercelResponse) {
   const token = getAdminToken()
-
   const isProd = process.env.NODE_ENV === "production"
+
   const cookie = [
     `${COOKIE_NAME}=${token}`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
-    "Max-Age=28800",
+    isProd ? "SameSite=None" : "SameSite=Lax",
     isProd ? "Secure" : "",
+    "Max-Age=28800",
   ]
     .filter(Boolean)
     .join("; ")
@@ -33,13 +32,14 @@ export function setAdminCookie(res: VercelResponse) {
 
 export function clearAdminCookie(res: VercelResponse) {
   const isProd = process.env.NODE_ENV === "production"
+
   const cookie = [
     `${COOKIE_NAME}=`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
-    "Max-Age=0",
+    isProd ? "SameSite=None" : "SameSite=Lax",
     isProd ? "Secure" : "",
+    "Max-Age=0",
   ]
     .filter(Boolean)
     .join("; ")
