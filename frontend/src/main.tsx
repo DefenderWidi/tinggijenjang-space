@@ -8,6 +8,7 @@ import SelectRole from "./SelectRole"
 import Measure from "./pages/Measure"
 import PjaDashboard from "./pages/PjaDashboard"
 import EvaluatorDashboard from "./pages/Dashboard"
+import Admin from "./pages/admin"
 
 type Role = "FIELD" | "PJA" | "EVALUATOR"
 
@@ -141,6 +142,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             </RequireBaseAuth>
           }
         />
+
+        <Route path="/admin" element={<Admin />} />
 
         {/* 404 */}
         <Route path="*" element={<div className="p-6">404</div>} />

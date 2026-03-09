@@ -3,12 +3,15 @@ import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 
 const LS_KEY = "mt_session_v1"
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 
-function saveBaseSession(payload: { username: string }) {
+function saveBaseSession(payload: { username: string; role: string; id?: string }) {
   localStorage.setItem(
     LS_KEY,
     JSON.stringify({
+      id: payload.id ?? null,
       username: payload.username,
+      role: payload.role,
       ts: Date.now(),
     })
   )
@@ -25,15 +28,49 @@ export default function Login() {
     return username.trim().length > 0 && password.trim().length > 0
   }, [username, password])
 
-  function handleLogin() {
-    if (!canProceed) {
-      alert("Username dan password wajib diisi.")
+async function handleLogin() {
+  if (!canProceed) {
+    alert("Username dan password wajib diisi.")
+    return
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username: username.trim(),
+        password: password.trim(),
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      alert(data?.error || "Login gagal")
       return
     }
 
-    saveBaseSession({ username: username.trim() })
+    const user = data?.user
+    if (!user?.username || !user?.role) {
+      alert("Respons login tidak valid")
+      return
+    }
+
+    saveBaseSession({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+    })
+
     nav("/select-role", { replace: true })
+  } catch (err) {
+    console.error("login error:", err)
+    alert("Tidak dapat terhubung ke server")
   }
+}
 
   return (
     <div className="relative min-h-screen overflow-hidden">
