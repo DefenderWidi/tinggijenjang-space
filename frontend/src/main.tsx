@@ -10,17 +10,20 @@ import PjaDashboard from "./pages/PjaDashboard"
 import EvaluatorDashboard from "./pages/Dashboard"
 import Admin from "./pages/Admin"
 
-type Role = "FIELD" | "PJA" | "EVALUATOR"
+type ActiveRole = "FIELD" | "PJA" | "EVALUATOR"
+type AccountRole = "USER" | "ADMIN"
 
 const LS_KEY = "mt_session_v1"
 
 type Session = {
+  id?: string | null
   username?: string
-  role?: Role
+  accountRole?: AccountRole
+  activeRole?: ActiveRole | null
   ts?: number
 }
 
-/** session boleh belum punya role (baru selesai login) */
+/** session boleh belum punya activeRole (baru selesai login) */
 function getSession(): Session | null {
   try {
     const raw = localStorage.getItem(LS_KEY)
@@ -33,11 +36,11 @@ function getSession(): Session | null {
   }
 }
 
-function isValidRole(role: any): role is Role {
+function isValidRole(role: any): role is ActiveRole {
   return role === "FIELD" || role === "PJA" || role === "EVALUATOR"
 }
 
-function defaultRouteByRole(role: Role) {
+function defaultRouteByRole(role: ActiveRole) {
   switch (role) {
     case "FIELD":
       return "/measure"
@@ -57,23 +60,23 @@ function RequireBaseAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-/** butuh login + role valid */
+/** butuh login + activeRole valid */
 function RequireRoles({
   roles,
   children,
 }: {
-  roles: Role[]
+  roles: ActiveRole[]
   children: React.ReactNode
 }) {
   const s = getSession()
   if (!s) return <Navigate to="/login" replace />
 
   // sudah login tapi role belum dipilih -> arahkan ke select-role
-  if (!isValidRole(s.role)) return <Navigate to="/select-role" replace />
+  if (!isValidRole(s.activeRole)) return <Navigate to="/select-role" replace />
 
   // role ada tapi bukan role yang diizinkan untuk halaman ini
-  if (!roles.includes(s.role)) {
-    return <Navigate to={defaultRouteByRole(s.role)} replace />
+  if (!roles.includes(s.activeRole)) {
+    return <Navigate to={defaultRouteByRole(s.activeRole)} replace />
   }
 
   return <>{children}</>
@@ -83,12 +86,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
-        {/* Root: selalu ke login (sesuai kebutuhan Anda) */}
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<Login />} />
 
-        {/* Select Role: butuh username (base auth) */}
         <Route
           path="/select-role"
           element={
@@ -98,7 +99,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
-        {/* FIELD + MINING_EYES */}
         <Route
           path="/measure"
           element={
@@ -108,7 +108,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
-        {/* PJA */}
         <Route
           path="/pja"
           element={
@@ -118,7 +117,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
-        {/* EVALUATOR */}
         <Route
           path="/app"
           element={
@@ -128,7 +126,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
-        {/* Optional: landing setelah role dipilih */}
         <Route
           path="/home"
           element={
@@ -136,16 +133,24 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               {(() => {
                 const s = getSession()
                 if (!s) return <Navigate to="/login" replace />
-                if (!isValidRole(s.role)) return <Navigate to="/select-role" replace />
-                return <Navigate to={defaultRouteByRole(s.role)} replace />
+                if (!isValidRole(s.activeRole)) {
+                  return <Navigate to="/select-role" replace />
+                }
+                return <Navigate to={defaultRouteByRole(s.activeRole)} replace />
               })()}
             </RequireBaseAuth>
           }
         />
 
-        <Route path="/admin" element={<Admin />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireBaseAuth>
+              <Admin />
+            </RequireBaseAuth>
+          }
+        />
 
-        {/* 404 */}
         <Route path="*" element={<div className="p-6">404</div>} />
       </Routes>
     </BrowserRouter>
