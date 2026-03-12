@@ -137,7 +137,6 @@ function SubmitResultCard({
 type Pt = { x: number; y: number }
 type Line = { p1: Pt; p2: Pt; id: string; label?: string }
 
-const MIN_BENCH = 4
 const HIT_R = 6
 const NEAR = HIT_R * 2
 
@@ -162,7 +161,18 @@ function angleDeg(a: Pt, b: Pt) {
   return (Math.atan2(dy, dx) * 180) / Math.PI
 }
 
+function rectOverlap(a: BadgeRect, b: BadgeRect, pad = 6) {
+  return !(
+    a.x + a.w + pad < b.x ||
+    b.x + b.w + pad < a.x ||
+    a.y + a.h + pad < b.y ||
+    b.y + b.h + pad < a.y
+  )
+}
+
 type Shift = "DAY" | "NIGHT"
+
+type BadgeRect = { x: number; y: number; w: number; h: number }
 
 export default function Measure() {
   // ======= Refs =======
@@ -313,88 +323,177 @@ const [submitMsg, setSubmitMsg] = useState<string>("")
     if (stroke) ctx.stroke()
   }
 
-  function drawLine(
-    ctx: CanvasRenderingContext2D,
-    a: Pt,
-    b: Pt,
-    label: string,
-    text: string,
-    tone: "safe" | "danger" | "ref"
-  ) {
-    const colors =
-      tone === "ref"
-        ? { core: "#16A34A", glow: "rgba(22,163,74,.25)" }
-        : tone === "danger"
-          ? { core: "#E11D48", glow: "rgba(225,29,72,.18)" }
-          : { core: "#2563EB", glow: "rgba(37,99,235,.18)" }
+function drawLine(
+  ctx: CanvasRenderingContext2D,
+  a: Pt,
+  b: Pt,
+  label: string,
+  text: string,
+  tone: "measure" | "ref",
+  occupiedBadges: BadgeRect[],
+  danger = false
+) {
+const colors =
+  tone === "ref"
+    ? { core: "#16A34A", glow: "rgba(22,163,74,.25)" }
+    : danger
+      ? { core: "#DC2626", glow: "rgba(220,38,38,.18)" }
+      : { core: "#2563EB", glow: "rgba(37,99,235,.18)" }
 
-    ctx.save()
-    ctx.lineCap = "round"
-    ctx.lineJoin = "round"
+  ctx.save()
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
 
-    ctx.strokeStyle = colors.glow
-    ctx.lineWidth = 12
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.stroke()
+  // line glow
+  ctx.strokeStyle = colors.glow
+  ctx.lineWidth = 12
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.lineTo(b.x, b.y)
+  ctx.stroke()
 
-    ctx.strokeStyle = "rgba(0,0,0,.55)"
-    ctx.lineWidth = 7
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.stroke()
+  // line shadow
+  ctx.strokeStyle = "rgba(0,0,0,.55)"
+  ctx.lineWidth = 7
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.lineTo(b.x, b.y)
+  ctx.stroke()
 
-    ctx.strokeStyle = colors.core
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.stroke()
+  // line core
+  ctx.strokeStyle = colors.core
+  ctx.lineWidth = 4
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.lineTo(b.x, b.y)
+  ctx.stroke()
 
-    drawPoint(ctx, a.x, a.y, "#FFFFFF")
-    ctx.strokeStyle = "rgba(0,0,0,.55)"
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.arc(a.x, a.y, HIT_R + 2, 0, Math.PI * 2)
-    ctx.stroke()
+  // endpoints
+  drawPoint(ctx, a.x, a.y, "#FFFFFF")
+  ctx.strokeStyle = "rgba(0,0,0,.55)"
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.arc(a.x, a.y, HIT_R + 2, 0, Math.PI * 2)
+  ctx.stroke()
 
-    drawPoint(ctx, b.x, b.y, "#FFFFFF")
-    ctx.beginPath()
-    ctx.arc(b.x, b.y, HIT_R + 2, 0, Math.PI * 2)
-    ctx.stroke()
+  drawPoint(ctx, b.x, b.y, "#FFFFFF")
+  ctx.beginPath()
+  ctx.arc(b.x, b.y, HIT_R + 2, 0, Math.PI * 2)
+  ctx.stroke()
 
-    const mx = (a.x + b.x) / 2
-    const my = (a.y + b.y) / 2
+  // compact badge position
+ctx.font = "900 11px Arial"
+const tagW = ctx.measureText(label).width
 
-    ctx.font = "900 12px Arial"
-    const tagW = ctx.measureText(label).width
-    ctx.font = "700 12px Arial"
-    const txtW = ctx.measureText(text).width
-    const w = Math.max(tagW + 18, txtW + 50)
-    const h = 34
+ctx.font = "800 11px Arial"
+const txtW = ctx.measureText(text).width
 
-    ctx.fillStyle = "rgba(255,255,255,.92)"
-    ctx.strokeStyle = "rgba(0,0,0,.18)"
-    ctx.lineWidth = 1
-    roundRect(ctx, mx - w / 2, my - h - 10, w, h, 10, true, true)
+const chipW = Math.max(18, tagW + 8)
+const textPadLeft = 7
+const textPadRight = 8
+const gap = 4
+const w = chipW + gap + txtW + textPadLeft + textPadRight + 8
+const h = 26
 
-    ctx.fillStyle = colors.core
-    roundRect(ctx, mx - w / 2 + 6, my - h - 10 + 6, 22, 22, 8, true, false)
-    ctx.fillStyle = "#FFFFFF"
-    ctx.font = "900 12px Arial"
-    ctx.fillText(label, mx - w / 2 + 12, my - h - 10 + 21)
+const topPt = a.y <= b.y ? a : b
+const bottomPt = a.y > b.y ? a : b
 
-    ctx.font = "700 12px Arial"
-    ctx.strokeStyle = "rgba(255,255,255,.9)"
-    ctx.lineWidth = 3
-    ctx.strokeText(text, mx - w / 2 + 34, my - h - 10 + 21)
-    ctx.fillStyle = "#0B1220"
-    ctx.fillText(text, mx - w / 2 + 34, my - h - 10 + 21)
+const mx = (a.x + b.x) / 2
+let bx = mx - w / 2
+bx = Math.max(8, Math.min(bx, ctx.canvas.width - w - 8))
 
-    ctx.restore()
+const safeGap = 12
+const laneStep = h + 6
+
+let by = topPt.y - h - safeGap
+let placed = false
+
+// prioritas slot:
+// atas dekat -> bawah dekat -> atas level 2 -> bawah level 2 -> dst
+const candidates: number[] = []
+for (let level = 0; level < 4; level++) {
+  const topY = topPt.y - h - safeGap - level * laneStep
+  const bottomY = bottomPt.y + safeGap + level * laneStep
+
+  candidates.push(topY)
+  candidates.push(bottomY)
+}
+
+for (const tryY of candidates) {
+  // skip kalau keluar canvas
+  if (tryY < 8 || tryY + h > ctx.canvas.height - 8) continue
+
+  const rect = { x: bx, y: tryY, w, h }
+  const hit = occupiedBadges.some((r) => rectOverlap(rect, r, 6))
+
+  if (!hit) {
+    by = tryY
+    occupiedBadges.push(rect)
+    placed = true
+    break
   }
+}
+
+// fallback terakhir kalau semua tabrakan
+if (!placed) {
+  const fallbackRect = { x: bx, y: by, w, h }
+  occupiedBadges.push(fallbackRect)
+}
+
+  // leader line: badge ke titik atas / bawah garis
+  const badgeCenterX = bx + w / 2
+  const badgeBottomY = by + h
+  const badgeTopY = by
+
+  const anchorPt =
+    by < topPt.y
+      ? { x: topPt.x, y: topPt.y - 2 }     // badge di atas, arahkan ke titik atas
+      : { x: bottomPt.x, y: bottomPt.y + 2 } // badge di bawah, arahkan ke titik bawah
+
+  const startPt =
+    by < topPt.y
+      ? { x: badgeCenterX, y: badgeBottomY }
+      : { x: badgeCenterX, y: badgeTopY }
+
+  ctx.save()
+   ctx.strokeStyle = tone === "ref" ? "rgba(22,163,74,.55)" : `${colors.core}88`
+  ctx.lineWidth = 1.2
+  ctx.setLineDash([4, 4])
+  ctx.beginPath()
+  ctx.moveTo(startPt.x, startPt.y)
+  ctx.lineTo(anchorPt.x, anchorPt.y)
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.restore()
+
+  // outer white pill
+  ctx.fillStyle = "rgba(255,255,255,.94)"
+  ctx.strokeStyle = danger ? "rgba(220,38,38,.55)" : "rgba(0,0,0,.18)"
+  ctx.lineWidth = danger ? 1.5 : 1
+  roundRect(ctx, bx, by, w, h, 999, true, true)
+
+  // colored label chip
+  ctx.fillStyle = colors.core
+  roundRect(ctx, bx + 4, by + 4, chipW, h - 8, 999, true, false)
+
+  // label text
+  ctx.fillStyle = "#FFFFFF"
+  ctx.font = "900 11px Arial"
+  ctx.textBaseline = "middle"
+  ctx.fillText(label, bx + 4 + (chipW - tagW) / 2, by + h / 2 + 0.5)
+
+  // value text
+  ctx.font = "800 11px Arial"
+  ctx.strokeStyle = "rgba(255,255,255,.92)"
+  ctx.lineWidth = 2.5
+ const textX = bx + 4 + chipW + gap + textPadLeft
+  const textY = by + h / 2 + 0.5
+  ctx.strokeText(text, textX, textY)
+  ctx.fillStyle = danger ? "#B91C1C" : "#0B1220"
+  ctx.fillText(text, textX, textY)
+
+  ctx.restore()
+}
 
   function redraw() {
     const canvas = canvasRef.current
@@ -414,32 +513,38 @@ const [submitMsg, setSubmitMsg] = useState<string>("")
       ctx.fillText("Upload photo to start measuring.", 16, 28)
     }
 
+    const occupiedBadges: BadgeRect[] = []
+
     if (referenceLine) {
-      drawLine(
-        ctx,
-        referenceLine.p1,
-        referenceLine.p2,
-        "REF",
-        `${refMeter.toFixed(2)} m`,
-        "ref"
-      )
+drawLine(
+  ctx,
+  referenceLine.p1,
+  referenceLine.p2,
+  "REF",
+  `${refMeter.toFixed(2)} m`,
+  "ref",
+  occupiedBadges,
+  false
+)
     }
 
-    measurements.forEach((m, idx) => {
-      if (!pixelPerMeter) return
-      const meter = dist(m.p1, m.p2) / pixelPerMeter
-      const deg = angleDeg(m.p1, m.p2)
- const danger = meter < MIN_BENCH || meter > maxBench
-      const label = m.label ?? labelFromIndex(idx)
-      drawLine(
-        ctx,
-        m.p1,
-        m.p2,
-        label,
-        `${meter.toFixed(2)} m | ${deg.toFixed(1)}°`,
-        danger ? "danger" : "safe"
-      )
-    })
+measurements.forEach((m, idx) => {
+  if (!pixelPerMeter) return
+  const meter = dist(m.p1, m.p2) / pixelPerMeter
+  const danger = meter > maxBench
+  const label = m.label ?? labelFromIndex(idx)
+
+drawLine(
+  ctx,
+  m.p1,
+  m.p2,
+  label,
+  `${meter.toFixed(2)} m`,
+  "measure",
+  occupiedBadges,
+  danger
+)
+})
 
     if (tempPoints.length === 1) {
       const p = tempPoints[0]
@@ -478,7 +583,7 @@ const [submitMsg, setSubmitMsg] = useState<string>("")
     const meters = measurements.map((m) => dist(m.p1, m.p2) / pixelPerMeter)
     const maxHeightM = meters.length ? Math.max(...meters) : 0
     const linesCount = meters.length
-const linesOkCount = meters.filter((x) => x >= MIN_BENCH && x <= maxBench).length
+const linesOkCount = meters.filter((x) => x <= maxBench).length
     return { maxHeightM, linesCount, linesOkCount }
   }
 
@@ -1257,10 +1362,10 @@ setTimeout(() => setSubmitStatus("idle"), 2000)
                   tone={currentDeg != null ? "ok" : "info"}
                 />
                 <StatPill
-  label="Limit"
-  value={`${maxBench.toFixed(2)} m`}
-  tone="info"
-/>
+                  label="Limit"
+                  value={`${maxBench.toFixed(2)} m`}
+                  tone="info"
+                />
               </div>
             </div>
           </div>
