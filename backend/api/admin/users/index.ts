@@ -17,7 +17,10 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Vary", "Origin")
   res.setHeader("Access-Control-Allow-Credentials", "true")
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  )
   res.setHeader("Access-Control-Max-Age", "86400")
 }
 
@@ -35,6 +38,7 @@ function parseBody(req: VercelRequest): Record<string, any> | null {
 }
 
 const ALLOWED_ROLES = ["USER", "ADMIN"] as const
+const ALLOWED_OPERATIONAL_ACCESS = ["NONE", "FIELD", "PJA"] as const
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res)
@@ -46,7 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "GET") {
       const { data, error } = await supabaseAdmin
         .from("app_users")
-        .select("id, username, role, is_active, created_at, updated_at")
+        .select(
+          "id, username, role, operational_access, is_active, created_at, updated_at"
+        )
         .order("created_at", { ascending: false })
 
       if (error) return res.status(500).json({ error: error.message })
@@ -60,13 +66,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const username = String(body.username ?? "").trim()
       const password = String(body.password ?? "").trim()
       const role = String(body.role ?? "").trim().toUpperCase()
+      const operationalAccess = String(
+        body.operational_access ?? "NONE"
+      ).trim().toUpperCase()
 
       if (!username || !password || !role) {
-        return res.status(400).json({ error: "Required: username, password, role" })
+        return res
+          .status(400)
+          .json({ error: "Required: username, password, role" })
       }
 
-      if (!ALLOWED_ROLES.includes(role as any)) {
+      if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
         return res.status(400).json({ error: "Role tidak valid" })
+      }
+
+      if (
+        !ALLOWED_OPERATIONAL_ACCESS.includes(
+          operationalAccess as (typeof ALLOWED_OPERATIONAL_ACCESS)[number]
+        )
+      ) {
+        return res.status(400).json({ error: "Operational access tidak valid" })
       }
 
       if (password.length < 4) {
@@ -80,19 +99,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .maybeSingle()
 
       if (checkError) return res.status(500).json({ error: checkError.message })
-      if (existing) return res.status(409).json({ error: "Username sudah digunakan" })
+      if (existing) {
+        return res.status(409).json({ error: "Username sudah digunakan" })
+      }
 
       const payload = {
         username,
         password_hash: hashPassword(password),
         role,
+        operational_access: role === "ADMIN" ? "NONE" : operationalAccess,
         is_active: true,
       }
 
       const { data, error } = await supabaseAdmin
         .from("app_users")
         .insert(payload)
-        .select("id, username, role, is_active, created_at, updated_at")
+        .select(
+          "id, username, role, operational_access, is_active, created_at, updated_at"
+        )
         .single()
 
       if (error) return res.status(500).json({ error: error.message })

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 
 type ActiveRole = "FIELD" | "PJA" | "EVALUATOR"
 type AccountRole = "USER" | "ADMIN"
+type OperationalAccess = "NONE" | "FIELD" | "PJA"
 
 const LS_KEY = "mt_session_v1"
 
@@ -10,6 +11,7 @@ type SessionData = {
   id?: string | null
   username?: string
   accountRole?: AccountRole
+  operationalAccess?: OperationalAccess
   activeRole?: ActiveRole | null
   ts?: number
 }
@@ -54,7 +56,22 @@ function accountLabel(role?: AccountRole) {
   return role === "ADMIN" ? "ADMIN" : "USER"
 }
 
-function clusterLabel(role?: ActiveRole | null, accountRole?: AccountRole) {
+function operationalAccessLabel(access?: OperationalAccess) {
+  switch (access) {
+    case "FIELD":
+      return "FIELD"
+    case "PJA":
+      return "PJA"
+    case "NONE":
+    default:
+      return "NONE"
+  }
+}
+
+function activeRoleClusterLabel(
+  role?: ActiveRole | null,
+  accountRole?: AccountRole
+) {
   return `${roleBadge(role)} | ${accountLabel(accountRole)}`
 }
 
@@ -117,7 +134,38 @@ function ClusterBadge({
       }`}
     >
       {isAdmin ? <ShieldUserIcon className="h-3.5 w-3.5" /> : null}
-      {clusterLabel(activeRole, accountRole)}
+      {activeRoleClusterLabel(activeRole, accountRole)}
+    </span>
+  )
+}
+
+function AccessBadge({
+  operationalAccess,
+  accountRole,
+}: {
+  operationalAccess?: OperationalAccess
+  accountRole?: AccountRole
+}) {
+  const isAdmin = accountRole === "ADMIN"
+  const access = operationalAccess ?? "NONE"
+
+  if (isAdmin) {
+    return (
+      <span className="inline-flex items-center rounded-lg border border-buma-green/35 bg-buma-green/10 px-2.5 py-0.5 text-[11px] font-extrabold tracking-wider text-buma-green">
+        FULL ACCESS
+      </span>
+    )
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-[11px] font-extrabold tracking-wider ${
+        access === "NONE"
+          ? "border-orange-300/60 bg-orange-50 text-orange-700"
+          : "border-buma-blue/20 bg-buma-blue/5 text-buma-blue"
+      }`}
+    >
+      ACCESS: {operationalAccessLabel(access)}
     </span>
   )
 }
@@ -145,13 +193,18 @@ function AccountCard({
   username,
   activeRole,
   accountRole,
+  operationalAccess,
   onBack,
 }: {
   username: string
   activeRole?: ActiveRole | null
   accountRole?: AccountRole
+  operationalAccess?: OperationalAccess
   onBack: () => void
 }) {
+  const isAdmin = accountRole === "ADMIN"
+  const access = operationalAccess ?? "NONE"
+
   return (
     <div className="p-3">
       <div className="rounded-xl border border-buma-border bg-white/70 p-3">
@@ -173,6 +226,26 @@ function AccountCard({
             <ClusterBadge activeRole={activeRole} accountRole={accountRole} />
           </div>
         </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <AccessBadge
+            operationalAccess={operationalAccess}
+            accountRole={accountRole}
+          />
+          <span className="inline-flex items-center rounded-lg border border-buma-border bg-white px-2.5 py-0.5 text-[11px] font-bold text-buma-muted">
+            {accountLabel(accountRole)}
+          </span>
+        </div>
+
+        <div className="mt-3 text-xs leading-relaxed text-buma-muted">
+          {isAdmin
+            ? "Akun ini memiliki akses penuh ke seluruh workspace dan panel admin."
+            : access === "NONE"
+              ? "Akun ini belum memiliki akses operasional. Hubungi admin untuk pengaturan role."
+              : access === "FIELD"
+                ? "Akun ini hanya dapat mengakses Inspector Lapangan."
+                : "Akun ini dapat mengakses Inspector Lapangan dan Verifikasi PJA."}
+        </div>
       </div>
 
       <BackToSelectButton onClick={onBack} />
@@ -189,6 +262,7 @@ export default function Topbar() {
   const username = session?.username ?? "—"
   const activeRole = session?.activeRole
   const accountRole = session?.accountRole
+  const operationalAccess = session?.operationalAccess ?? "NONE"
 
   const handleBackToSelectRole = () => {
     setAcctOpen(false)
@@ -262,11 +336,12 @@ export default function Topbar() {
           </button>
 
           {acctOpen && (
-            <div className="hidden md:block absolute right-0 mt-2 w-[340px] overflow-hidden rounded-2xl border border-buma-border bg-white/90 shadow-xl backdrop-blur">
+            <div className="hidden md:block absolute right-0 mt-2 w-[360px] overflow-hidden rounded-2xl border border-buma-border bg-white/90 shadow-xl backdrop-blur">
               <AccountCard
                 username={username}
                 activeRole={activeRole}
                 accountRole={accountRole}
+                operationalAccess={operationalAccess}
                 onBack={handleBackToSelectRole}
               />
               <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-buma-green/30 to-transparent" />
@@ -283,6 +358,7 @@ export default function Topbar() {
                 username={username}
                 activeRole={activeRole}
                 accountRole={accountRole}
+                operationalAccess={operationalAccess}
                 onBack={handleBackToSelectRole}
               />
               <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-buma-green/30 to-transparent" />

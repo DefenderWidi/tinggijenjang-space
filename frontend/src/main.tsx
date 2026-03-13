@@ -12,6 +12,7 @@ import Admin from "./pages/Admin"
 
 type ActiveRole = "FIELD" | "PJA" | "EVALUATOR"
 type AccountRole = "USER" | "ADMIN"
+type OperationalAccess = "NONE" | "FIELD" | "PJA"
 
 const LS_KEY = "mt_session_v1"
 
@@ -19,11 +20,12 @@ type Session = {
   id?: string | null
   username?: string
   accountRole?: AccountRole
+  operationalAccess?: OperationalAccess
   activeRole?: ActiveRole | null
   ts?: number
 }
 
-/** session boleh belum punya activeRole (baru selesai login) */
+/** session boleh belum punya activeRole */
 function getSession(): Session | null {
   try {
     const raw = localStorage.getItem(LS_KEY)
@@ -40,27 +42,60 @@ function isValidRole(role: any): role is ActiveRole {
   return role === "FIELD" || role === "PJA" || role === "EVALUATOR"
 }
 
-function defaultRouteByRole(role: ActiveRole) {
-  switch (role) {
-    case "FIELD":
-      return "/measure"
-    case "PJA":
-      return "/pja"
-    case "EVALUATOR":
-      return "/app"
-    default:
-      return "/login"
+function canAccessRole(session: Session, role: ActiveRole) {
+  const isAdmin = session.accountRole === "ADMIN"
+  const access = session.operationalAccess ?? "NONE"
+
+  if (isAdmin) return true
+
+  if (role === "FIELD") {
+    return access === "FIELD" || access === "PJA"
   }
+
+  if (role === "PJA") {
+    return access === "PJA"
+  }
+
+  if (role === "EVALUATOR") {
+    return false
+  }
+
+  return false
 }
 
-/** cukup sudah login (punya username), walau role belum dipilih */
+function defaultRouteForSession(session: Session) {
+  const isAdmin = session.accountRole === "ADMIN"
+  const access = session.operationalAccess ?? "NONE"
+
+  if (isAdmin) {
+    if (isValidRole(session.activeRole)) {
+      if (session.activeRole === "FIELD") return "/measure"
+      if (session.activeRole === "PJA") return "/pja"
+      if (session.activeRole === "EVALUATOR") return "/app"
+    }
+    return "/select-role"
+  }
+
+  if (isValidRole(session.activeRole) && canAccessRole(session, session.activeRole)) {
+    if (session.activeRole === "FIELD") return "/measure"
+    if (session.activeRole === "PJA") return "/pja"
+  }
+
+  if (access === "FIELD" || access === "PJA" || access === "NONE") {
+    return "/select-role"
+  }
+
+  return "/login"
+}
+
+/** cukup sudah login */
 function RequireBaseAuth({ children }: { children: React.ReactNode }) {
   const s = getSession()
   if (!s) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
-/** butuh login + activeRole valid */
+/** butuh login + activeRole valid + akses sesuai session */
 function RequireRoles({
   roles,
   children,
@@ -71,14 +106,28 @@ function RequireRoles({
   const s = getSession()
   if (!s) return <Navigate to="/login" replace />
 
-  // sudah login tapi role belum dipilih -> arahkan ke select-role
-  if (!isValidRole(s.activeRole)) return <Navigate to="/select-role" replace />
-
-  // role ada tapi bukan role yang diizinkan untuk halaman ini
-  if (!roles.includes(s.activeRole)) {
-    return <Navigate to={defaultRouteByRole(s.activeRole)} replace />
+  if (!isValidRole(s.activeRole)) {
+    return <Navigate to="/select-role" replace />
   }
 
+  if (!canAccessRole(s, s.activeRole)) {
+    return <Navigate to="/select-role" replace />
+  }
+
+  if (!roles.includes(s.activeRole)) {
+    return <Navigate to={defaultRouteForSession(s)} replace />
+  }
+
+  return <>{children}</>
+}
+
+/** khusus admin only */
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const s = getSession()
+  if (!s) return <Navigate to="/login" replace />
+  if (s.accountRole !== "ADMIN") {
+    return <Navigate to={defaultRouteForSession(s)} replace />
+  }
   return <>{children}</>
 }
 
@@ -133,10 +182,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               {(() => {
                 const s = getSession()
                 if (!s) return <Navigate to="/login" replace />
-                if (!isValidRole(s.activeRole)) {
-                  return <Navigate to="/select-role" replace />
-                }
-                return <Navigate to={defaultRouteByRole(s.activeRole)} replace />
+                return <Navigate to={defaultRouteForSession(s)} replace />
               })()}
             </RequireBaseAuth>
           }
@@ -145,9 +191,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route
           path="/admin"
           element={
-            <RequireBaseAuth>
+            <RequireAdmin>
               <Admin />
-            </RequireBaseAuth>
+            </RequireAdmin>
           }
         />
 

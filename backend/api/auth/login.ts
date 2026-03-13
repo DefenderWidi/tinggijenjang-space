@@ -60,7 +60,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: user, error } = await supabaseAdmin
       .from("app_users")
-      .select("id, username, password_hash, role, is_active")
+      .select(
+        "id, username, password_hash, role, operational_access, is_active"
+      )
       .eq("username", username)
       .maybeSingle()
 
@@ -82,6 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: user.id,
         username: user.username,
         role: user.role,
+        operationalAccess: user.operational_access ?? "NONE",
       },
     })
   } catch (e: any) {

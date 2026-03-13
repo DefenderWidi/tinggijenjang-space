@@ -5,9 +5,12 @@ import { motion } from "framer-motion"
 const LS_KEY = "mt_session_v1"
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 
+type OperationalAccess = "NONE" | "FIELD" | "PJA"
+
 function saveBaseSession(payload: {
   username: string
   accountRole: string
+  operationalAccess?: OperationalAccess
   id?: string
 }) {
   localStorage.setItem(
@@ -16,6 +19,7 @@ function saveBaseSession(payload: {
       id: payload.id ?? null,
       username: payload.username,
       accountRole: payload.accountRole,
+      operationalAccess: payload.operationalAccess ?? "NONE",
       activeRole: null,
       ts: Date.now(),
     })
@@ -34,7 +38,7 @@ export default function Login() {
     return username.trim().length > 0 && password.trim().length > 0
   }, [username, password])
 
- async function handleLogin() {
+async function handleLogin() {
   if (!canProceed || loading) return
 
   setLoading(true)
@@ -61,17 +65,19 @@ export default function Login() {
     }
 
     const user = data?.user
+
     if (!user?.username || !user?.role) {
       alert("Respons login tidak valid")
       setLoading(false)
       return
     }
 
-    saveBaseSession({
-      id: user.id,
-      username: user.username,
-      accountRole: user.role,
-    })
+saveBaseSession({
+  id: user.id,
+  username: user.username,
+  accountRole: user.role,
+  operationalAccess: user.operationalAccess ?? "NONE",
+})
 
     nav("/select-role", { replace: true })
   } catch (err) {
@@ -83,7 +89,6 @@ export default function Login() {
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* Background */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/LoginBackground.jpeg')" }}
@@ -95,7 +100,6 @@ export default function Login() {
         transition={{ duration: 0.6, ease: "easeOut" }}
       />
 
-      {/* soft accents (BUMA vibe, tetap simpel) */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 -left-40 h-[520px] w-[520px] rounded-full bg-buma-green/12 blur-3xl" />
         <div className="absolute -bottom-40 -right-40 h-[520px] w-[520px] rounded-full bg-buma-orange/10 blur-3xl" />
@@ -104,7 +108,6 @@ export default function Login() {
       <div className="relative z-10 flex min-h-screen items-center">
         <div className="mx-auto w-full max-w-[1600px] px-4">
           <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
-            {/* MOBILE HEADER */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -134,7 +137,6 @@ export default function Login() {
               </div>
             </motion.div>
 
-            {/* LEFT PANEL */}
             <div className="hidden lg:flex flex-col justify-center lg:pl-14 xl:pl-20">
               <div className="max-w-lg">
                 <div className="mb-5 inline-flex items-center gap-3 rounded-3xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-xl">
@@ -173,7 +175,6 @@ export default function Login() {
               </div>
             </div>
 
-            {/* RIGHT CARD */}
             <div className="flex items-center justify-center pb-10 lg:pb-0">
               <div className="w-full max-w-md">
                 <motion.div
@@ -233,32 +234,32 @@ export default function Login() {
                       </button>
                     </div>
 
-                 <button
-  onClick={handleLogin}
-  disabled={!canProceed || loading}
-  className="
-    mt-6 w-full rounded-xl
-    bg-gradient-to-r from-[#15803D] to-[#22A745]
-    px-4 py-2.5 text-sm font-extrabold text-white
-    transition-all duration-300 ease-out
-    hover:from-[#166534] hover:to-[#16A34A]
-    hover:shadow-[0_12px_28px_rgba(34,167,69,0.30)]
-    hover:-translate-y-[2px]
-    active:translate-y-[0px]
-    focus:outline-none focus:ring-2 focus:ring-[#22A745]/45
-    disabled:opacity-50 disabled:cursor-not-allowed
-    disabled:hover:shadow-none disabled:hover:translate-y-0
-  "
->
-  {loading ? (
-    <span className="flex items-center justify-center gap-2">
-      <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
-      Memproses...
-    </span>
-  ) : (
-    "Masuk"
-  )}
-</button>
+                    <button
+                      onClick={handleLogin}
+                      disabled={!canProceed || loading}
+                      className="
+                        mt-6 w-full rounded-xl
+                        bg-gradient-to-r from-[#15803D] to-[#22A745]
+                        px-4 py-2.5 text-sm font-extrabold text-white
+                        transition-all duration-300 ease-out
+                        hover:from-[#166534] hover:to-[#16A34A]
+                        hover:shadow-[0_12px_28px_rgba(34,167,69,0.30)]
+                        hover:-translate-y-[2px]
+                        active:translate-y-[0px]
+                        focus:outline-none focus:ring-2 focus:ring-[#22A745]/45
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        disabled:hover:shadow-none disabled:hover:translate-y-0
+                      "
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+                          Memproses...
+                        </span>
+                      ) : (
+                        "Masuk"
+                      )}
+                    </button>
                   </div>
                 </motion.div>
 
@@ -276,7 +277,13 @@ export default function Login() {
 
 function EyeIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" stroke="currentColor" fill="none" strokeWidth="2">
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      stroke="currentColor"
+      fill="none"
+      strokeWidth="2"
+    >
       <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -285,7 +292,13 @@ function EyeIcon() {
 
 function EyeOffIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" stroke="currentColor" fill="none" strokeWidth="2">
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      stroke="currentColor"
+      fill="none"
+      strokeWidth="2"
+    >
       <path d="M3 3l18 18" />
     </svg>
   )

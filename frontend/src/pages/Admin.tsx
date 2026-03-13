@@ -8,11 +8,13 @@ const LS_KEY = "mt_session_v1"
 
 type ActiveRole = "FIELD" | "PJA" | "EVALUATOR"
 type AccountRole = "USER" | "ADMIN"
+type OperationalAccess = "NONE" | "FIELD" | "PJA"
 
 type SessionData = {
   id?: string | null
   username?: string
   accountRole?: AccountRole
+  operationalAccess?: OperationalAccess
   activeRole?: ActiveRole | null
   ts?: number
 }
@@ -29,6 +31,7 @@ type UserRow = {
   id: string
   username: string
   role: string
+  operational_access?: OperationalAccess
   is_active?: boolean
   created_at?: string
   updated_at?: string
@@ -59,7 +62,9 @@ export default function Admin() {
 
   const [newUsername, setNewUsername] = useState("")
   const [newPassword, setNewPassword] = useState("")
-  const [newRole, setNewRole] = useState("USER")
+  const [newRole, setNewRole] = useState<AccountRole>("USER")
+  const [newOperationalAccess, setNewOperationalAccess] =
+    useState<OperationalAccess>("NONE")
 
   const [err, setErr] = useState("")
   const [msg, setMsg] = useState("")
@@ -78,16 +83,17 @@ export default function Admin() {
     setStats(data)
   }
 
-  async function loadUsers() {
-    const res = await fetch(`${API_BASE}/api/admin/users`, {
-      method: "GET",
-      credentials: "include",
-    })
+async function loadUsers() {
+  const res = await fetch(`${API_BASE}/api/admin/users`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  })
 
-    const data = await res.json()
-    if (!res.ok) throw new Error(data?.error || "Gagal mengambil user")
-    setUsers(data?.data || [])
-  }
+  const data = await res.json()
+  if (!res.ok) throw new Error(data?.error || "Gagal mengambil user")
+  setUsers(data?.data || [])
+}
 
   async function initAdminPage() {
     if (!username) {
@@ -154,6 +160,8 @@ export default function Admin() {
           username: newUsername.trim(),
           password: newPassword.trim(),
           role: newRole,
+          operational_access:
+            newRole === "ADMIN" ? "NONE" : newOperationalAccess,
         }),
       })
 
@@ -164,6 +172,7 @@ export default function Admin() {
       setNewUsername("")
       setNewPassword("")
       setNewRole("USER")
+      setNewOperationalAccess("NONE")
       await loadUsers()
     } catch (e: any) {
       setErr(e?.message || "Gagal membuat user")
@@ -242,6 +251,57 @@ export default function Admin() {
       setBusy(false)
     }
   }
+
+async function handleChangeOperationalAccess(
+  user: UserRow,
+  operationalAccess: OperationalAccess
+) {
+  setErr("")
+  setMsg("")
+  setBusy(true)
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/users/${user.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+   body: JSON.stringify({
+  operational_access: operationalAccess,
+}),
+    })
+
+    const result = await res.json()
+
+    if (!res.ok) {
+      throw new Error(result?.error || "Gagal mengubah akses operasional")
+    }
+
+    const updatedUser = result?.data
+
+    if (updatedUser) {
+      setUsers((prev) =>
+        prev.map((item) =>
+          item.id === user.id
+            ? {
+                ...item,
+                ...updatedUser,
+              }
+            : item
+        )
+      )
+    } else {
+      await loadUsers()
+    }
+
+    setMsg(`Akses ${user.username} berhasil diperbarui`)
+  } catch (e: any) {
+    setErr(e?.message || "Gagal mengubah akses operasional")
+  } finally {
+    setBusy(false)
+  }
+}
 
   async function handleReset() {
     if (confirmText !== "RESET") {
@@ -366,8 +426,8 @@ export default function Admin() {
                   Kelola Akses User
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Tambah user baru, lihat status user aktif, nonaktifkan akun,
-                  dan reset password bila diperlukan.
+                  Tambah user baru, atur akses operasional, lihat status user
+                  aktif, nonaktifkan akun, dan reset password bila diperlukan.
                 </p>
               </div>
 
@@ -392,14 +452,37 @@ export default function Admin() {
                     className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                   />
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
                     <select
                       value={newRole}
-                      onChange={(e) => setNewRole(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value as AccountRole
+                        setNewRole(value)
+                        if (value === "ADMIN") {
+                          setNewOperationalAccess("NONE")
+                        } else {
+                          setNewOperationalAccess("NONE")
+                        }
+                      }}
                       className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                     >
                       <option value="USER">USER</option>
                       <option value="ADMIN">ADMIN</option>
+                    </select>
+
+                    <select
+                      value={newOperationalAccess}
+                      onChange={(e) =>
+                        setNewOperationalAccess(
+                          e.target.value as OperationalAccess
+                        )
+                      }
+                      disabled={newRole === "ADMIN"}
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                      <option value="NONE">NONE</option>
+                      <option value="FIELD">FIELD</option>
+                      <option value="PJA">PJA</option>
                     </select>
 
                     <button
@@ -434,6 +517,9 @@ export default function Admin() {
                           Role
                         </th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600">
+                          Akses
+                        </th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600">
                           Status
                         </th>
                         <th className="px-4 py-3 text-right font-bold text-slate-600">
@@ -446,7 +532,7 @@ export default function Admin() {
                       {users.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={4}
+                            colSpan={5}
                             className="px-4 py-8 text-center text-sm text-slate-500"
                           >
                             Belum ada user.
@@ -464,9 +550,35 @@ export default function Admin() {
                               <td className="px-4 py-3 font-semibold text-slate-800">
                                 {u.username}
                               </td>
+
                               <td className="px-4 py-3 text-slate-700">
                                 {u.role}
                               </td>
+
+                              <td className="px-4 py-3 text-slate-700">
+                                {u.role === "ADMIN" ? (
+                                  <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                    FULL ACCESS
+                                  </span>
+                                ) : (
+                                  <select
+                                    value={u.operational_access ?? "NONE"}
+                                    disabled={busy}
+                                    onChange={(e) =>
+                                      handleChangeOperationalAccess(
+                                        u,
+                                        e.target.value as OperationalAccess
+                                      )
+                                    }
+                                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+                                  >
+                                    <option value="NONE">NONE</option>
+                                    <option value="FIELD">FIELD</option>
+                                    <option value="PJA">PJA</option>
+                                  </select>
+                                )}
+                              </td>
+
                               <td className="px-4 py-3">
                                 <span
                                   className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
@@ -478,6 +590,7 @@ export default function Admin() {
                                   {active ? "ACTIVE" : "INACTIVE"}
                                 </span>
                               </td>
+
                               <td className="px-4 py-3">
                                 <div className="flex min-w-[210px] flex-wrap justify-end gap-2">
                                   <button

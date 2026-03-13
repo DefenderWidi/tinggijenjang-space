@@ -17,7 +17,10 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Vary", "Origin")
   res.setHeader("Access-Control-Allow-Credentials", "true")
   res.setHeader("Access-Control-Allow-Methods", "PATCH,OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  )
   res.setHeader("Access-Control-Max-Age", "86400")
 }
 
@@ -35,13 +38,16 @@ function parseBody(req: VercelRequest): Record<string, any> | null {
 }
 
 const ALLOWED_ROLES = ["USER", "ADMIN"] as const
+const ALLOWED_OPERATIONAL_ACCESS = ["NONE", "FIELD", "PJA"] as const
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res)
 
   if (req.method === "OPTIONS") return res.status(200).end()
   if (!requireAdmin(req, res)) return
-  if (req.method !== "PATCH") return res.status(405).json({ error: "Method not allowed" })
+  if (req.method !== "PATCH") {
+    return res.status(405).json({ error: "Method not allowed" })
+  }
 
   try {
     const id = String(req.query.id ?? "").trim()
@@ -54,12 +60,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updated_at: new Date().toISOString(),
     }
 
+    let nextRole: string | undefined
+
     if (body.role != null) {
       const role = String(body.role).trim().toUpperCase()
-      if (!ALLOWED_ROLES.includes(role as any)) {
+      if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
         return res.status(400).json({ error: "Role tidak valid" })
       }
       patch.role = role
+      nextRole = role
+    }
+
+if (body.operational_access != null) {
+  const operationalAccess = String(body.operational_access)
+    .trim()
+    .toUpperCase()
+
+      if (
+        !ALLOWED_OPERATIONAL_ACCESS.includes(
+          operationalAccess as (typeof ALLOWED_OPERATIONAL_ACCESS)[number]
+        )
+      ) {
+        return res.status(400).json({ error: "Operational access tidak valid" })
+      }
+
+      patch.operational_access = operationalAccess
     }
 
     if (body.is_active != null) {
@@ -74,11 +99,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       patch.password_hash = hashPassword(password)
     }
 
+    // kalau role diubah jadi ADMIN, paksa operational_access jadi NONE
+    if (nextRole === "ADMIN") {
+      patch.operational_access = "NONE"
+    }
+
     const { data, error } = await supabaseAdmin
       .from("app_users")
       .update(patch)
       .eq("id", id)
-      .select("id, username, role, is_active, created_at, updated_at")
+      .select(
+        "id, username, role, operational_access, is_active, created_at, updated_at"
+      )
       .single()
 
     if (error) return res.status(500).json({ error: error.message })
