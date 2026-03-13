@@ -663,22 +663,38 @@ const linesOkCount = meters.filter((x) => x <= maxBench).length
     return r.json()
   }
 
-  async function saveInspectionLines(id: string) {
-    const lines = buildLinePayload()
-    if (!lines.length) throw new Error("Belum ada garis ukur untuk disimpan")
+async function saveInspectionLines(id: string) {
+  const lines = buildLinePayload()
 
-    const r = await fetch(`${API_BASE}/api/inspection-lines`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inspection_id: id,
-        lines, // [{label, height_m, ok}]
-      }),
-    })
-
-    if (!r.ok) throw new Error(await r.text())
-    return r.json()
+  if (!lines.length) {
+    throw new Error("Belum ada garis ukur untuk disimpan")
   }
+
+  const r = await fetch(`${API_BASE}/api/inspection-lines`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      inspection_id: id,
+      lines,
+    }),
+  })
+
+  const result = await r.json().catch(() => null)
+
+  if (!r.ok) {
+    throw new Error(result?.error || "Gagal menyimpan detail titik inspeksi")
+  }
+
+  const savedLines = Array.isArray(result?.data) ? result.data : []
+
+  if (savedLines.length !== lines.length) {
+    throw new Error(
+      `Detail titik tidak tersimpan lengkap (${savedLines.length}/${lines.length})`
+    )
+  }
+
+  return result
+}
 
   // ======= Upload =======
   async function onPickFile(file?: File) {
@@ -956,10 +972,16 @@ setSubmitMsg("")
         setInspectionId(id)
       }
 
-      await uploadMeasure(id)
-      await saveInspectionLines(id)
+await uploadMeasure(id)
+
+const savedLinesResult = await saveInspectionLines(id)
+
+if (!savedLinesResult?.data?.length) {
+  throw new Error("Detail titik gagal tersimpan")
+}
+
 setSubmitStatus("success")
-setSubmitMsg("Inspeksi berhasil tersimpan.")
+setSubmitMsg("Inspeksi berhasil tersimpan lengkap.")
 setTimeout(() => setSubmitStatus("idle"), 2000)
 
       const stats = computeStats()
@@ -967,9 +989,12 @@ setTimeout(() => setSubmitStatus("idle"), 2000)
         `Submit OK ✅  (Max: ${stats?.maxHeightM.toFixed(2)} m, Lines: ${stats?.linesCount}, OK: ${stats?.linesOkCount})`
       )
 } catch (e: any) {
+  const msg =
+    e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi."
+
   setSubmitStatus("error")
-  setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi.")
-  setHint(`Submit gagal ❌ ${e?.message ?? "unknown error"}`)
+  setSubmitMsg(msg)
+  setHint(`Submit gagal ❌ ${msg}`)
 } finally {
   setIsSubmitting(false)
 }
@@ -999,9 +1024,9 @@ setTimeout(() => setSubmitStatus("idle"), 2000)
           title="Gagal"
           desc={submitMsg || "Terjadi kendala. Silakan coba lagi."}
           onClose={() => setSubmitStatus("idle")}
-        onRetry={() => {
-  setSubmitStatus("loading")
-  setSubmitMsg("Mencoba ulang menyimpan data...")
+onRetry={() => {
+  setSubmitStatus("idle")
+  setSubmitMsg("")
   handleSubmit()
 }}
         />

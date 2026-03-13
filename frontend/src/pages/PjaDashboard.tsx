@@ -622,7 +622,7 @@ const standardM = useMemo(() => {
               <div className="min-w-0">
                 <div className="text-sm font-extrabold text-buma-text">Daftar Inspeksi</div>
                 <div className="mt-1 text-xs text-buma-muted">
-                  Data berasal dari <b>Supabase (inspections)</b>. Klik <b>Detail</b> untuk lihat foto overlay dan verifikasi.
+                  Klik <b>Detail</b> untuk lihat foto overlay dan verifikasi.
                 </div>
               </div>
             </div>
