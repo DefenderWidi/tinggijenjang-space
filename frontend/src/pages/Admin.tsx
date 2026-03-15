@@ -30,7 +30,7 @@ type Stats = {
 type UserRow = {
   id: string
   username: string
-  role: string
+  role: AccountRole | string
   operational_access?: OperationalAccess
   is_active?: boolean
   created_at?: string
@@ -45,6 +45,19 @@ function getSession(): SessionData | null {
   } catch {
     return null
   }
+}
+
+function formatDateLabel(value?: string) {
+  if (!value) return "-"
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  return d.toLocaleString("id-ID", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 export default function Admin() {
@@ -71,11 +84,14 @@ export default function Admin() {
   const [busy, setBusy] = useState(false)
 
   const [confirmText, setConfirmText] = useState("")
+  const [resetStartDate, setResetStartDate] = useState("")
+  const [resetEndDate, setResetEndDate] = useState("")
 
   async function loadStats() {
     const res = await fetch(`${API_BASE}/api/admin/stats`, {
       method: "GET",
       credentials: "include",
+      cache: "no-store",
     })
 
     const data = await res.json()
@@ -83,17 +99,17 @@ export default function Admin() {
     setStats(data)
   }
 
-async function loadUsers() {
-  const res = await fetch(`${API_BASE}/api/admin/users`, {
-    method: "GET",
-    credentials: "include",
-    cache: "no-store",
-  })
+  async function loadUsers() {
+    const res = await fetch(`${API_BASE}/api/admin/users`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    })
 
-  const data = await res.json()
-  if (!res.ok) throw new Error(data?.error || "Gagal mengambil user")
-  setUsers(data?.data || [])
-}
+    const data = await res.json()
+    if (!res.ok) throw new Error(data?.error || "Gagal mengambil user")
+    setUsers(data?.data || [])
+  }
 
   async function initAdminPage() {
     if (!username) {
@@ -181,6 +197,61 @@ async function loadUsers() {
     }
   }
 
+  async function handleUpdateUser(
+    user: UserRow,
+    patch: Partial<{
+      role: AccountRole
+      operational_access: OperationalAccess
+      is_active: boolean
+      password: string
+    }>,
+    successMessage?: string
+  ) {
+    setErr("")
+    setMsg("")
+    setBusy(true)
+
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(patch),
+      })
+
+      const result = await res.json()
+
+      if (!res.ok) {
+        throw new Error(result?.error || "Gagal memperbarui user")
+      }
+
+      const updatedUser = result?.data
+
+      if (updatedUser) {
+        setUsers((prev) =>
+          prev.map((item) =>
+            item.id === user.id
+              ? {
+                  ...item,
+                  ...updatedUser,
+                }
+              : item
+          )
+        )
+      } else {
+        await loadUsers()
+      }
+
+      setMsg(successMessage || `User ${user.username} berhasil diperbarui`)
+    } catch (e: any) {
+      setErr(e?.message || "Gagal memperbarui user")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleToggleUser(user: UserRow) {
     const actionLabel =
       user.is_active === false ? "mengaktifkan" : "menonaktifkan"
@@ -190,32 +261,13 @@ async function loadUsers() {
     )
     if (!ok) return
 
-    setErr("")
-    setMsg("")
-    setBusy(true)
-
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/users/${user.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          is_active: !(user.is_active ?? true),
-        }),
-      })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || "Gagal mengubah status user")
-
-      setMsg(`User ${user.username} berhasil diperbarui`)
-      await loadUsers()
-    } catch (e: any) {
-      setErr(e?.message || "Gagal mengubah status user")
-    } finally {
-      setBusy(false)
-    }
+    await handleUpdateUser(
+      user,
+      {
+        is_active: !(user.is_active ?? true),
+      },
+      `User ${user.username} berhasil diperbarui`
+    )
   }
 
   async function handleResetPassword(user: UserRow) {
@@ -224,84 +276,51 @@ async function loadUsers() {
     )
     if (!newPass) return
 
-    setErr("")
-    setMsg("")
-    setBusy(true)
-
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/users/${user.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          password: newPass,
-        }),
-      })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || "Gagal reset password")
-
-      setMsg(`Password user ${user.username} berhasil direset`)
-      await loadUsers()
-    } catch (e: any) {
-      setErr(e?.message || "Gagal reset password")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-async function handleChangeOperationalAccess(
-  user: UserRow,
-  operationalAccess: OperationalAccess
-) {
-  setErr("")
-  setMsg("")
-  setBusy(true)
-
-  try {
-    const res = await fetch(`${API_BASE}/api/admin/users/${user.id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
+    await handleUpdateUser(
+      user,
+      {
+        password: newPass,
       },
-      credentials: "include",
-   body: JSON.stringify({
-  operational_access: operationalAccess,
-}),
-    })
-
-    const result = await res.json()
-
-    if (!res.ok) {
-      throw new Error(result?.error || "Gagal mengubah akses operasional")
-    }
-
-    const updatedUser = result?.data
-
-    if (updatedUser) {
-      setUsers((prev) =>
-        prev.map((item) =>
-          item.id === user.id
-            ? {
-                ...item,
-                ...updatedUser,
-              }
-            : item
-        )
-      )
-    } else {
-      await loadUsers()
-    }
-
-    setMsg(`Akses ${user.username} berhasil diperbarui`)
-  } catch (e: any) {
-    setErr(e?.message || "Gagal mengubah akses operasional")
-  } finally {
-    setBusy(false)
+      `Password user ${user.username} berhasil direset`
+    )
   }
-}
+
+  async function handleChangeRole(user: UserRow, nextRole: AccountRole) {
+    const currentRole = (user.role as AccountRole) || "USER"
+    if (currentRole === nextRole) return
+
+    const isSelf = user.username === username
+    const roleLabel = nextRole === "ADMIN" ? "ADMIN" : "USER"
+
+    const ok = window.confirm(
+      isSelf
+        ? `Yakin ingin mengubah akun kamu sendiri menjadi ${roleLabel}?`
+        : `Yakin ingin mengubah role ${user.username} menjadi ${roleLabel}?`
+    )
+    if (!ok) return
+
+    await handleUpdateUser(
+      user,
+      {
+        role: nextRole,
+        operational_access: nextRole === "ADMIN" ? "NONE" : user.operational_access ?? "NONE",
+      },
+      `Role ${user.username} berhasil diubah menjadi ${roleLabel}`
+    )
+  }
+
+  async function handleChangeOperationalAccess(
+    user: UserRow,
+    operationalAccess: OperationalAccess
+  ) {
+    await handleUpdateUser(
+      user,
+      {
+        operational_access: operationalAccess,
+      },
+      `Akses ${user.username} berhasil diperbarui`
+    )
+  }
 
   async function handleReset() {
     if (confirmText !== "RESET") {
@@ -309,8 +328,18 @@ async function handleChangeOperationalAccess(
       return
     }
 
+    if (resetStartDate && resetEndDate && resetStartDate > resetEndDate) {
+      setErr("Tanggal mulai tidak boleh lebih besar dari tanggal akhir")
+      return
+    }
+
+    const dateText =
+      resetStartDate || resetEndDate
+        ? `\n\nRange tanggal:\n${resetStartDate || "(awal)"} s/d ${resetEndDate || "(akhir)"}`
+        : "\n\nSemua data akan dihapus."
+
     const ok = window.confirm(
-      "Yakin ingin reset data operasional dan menghapus semua photo di bucket?"
+      `Yakin ingin reset data operasional dan menghapus photo?${dateText}`
     )
     if (!ok) return
 
@@ -321,7 +350,14 @@ async function handleChangeOperationalAccess(
     try {
       const res = await fetch(`${API_BASE}/api/admin/reset-operational`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
         credentials: "include",
+        body: JSON.stringify({
+          startDate: resetStartDate || null,
+          endDate: resetEndDate || null,
+        }),
       })
 
       const data = await res.json()
@@ -329,7 +365,7 @@ async function handleChangeOperationalAccess(
 
       setMsg(data?.message || "Reset berhasil")
       setConfirmText("")
-      await loadStats()
+      await Promise.all([loadStats(), loadUsers()])
     } catch (e: any) {
       setErr(e?.message || "Reset gagal")
     } finally {
@@ -416,7 +452,7 @@ async function handleChangeOperationalAccess(
             </div>
           ) : null}
 
-          <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
             <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_55px_rgba(15,23,42,0.08)] sm:p-6">
               <div className="mb-5">
                 <div className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-sky-700">
@@ -426,8 +462,8 @@ async function handleChangeOperationalAccess(
                   Kelola Akses User
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Tambah user baru, atur akses operasional, lihat status user
-                  aktif, nonaktifkan akun, dan reset password bila diperlukan.
+                  Tambah user baru, ubah role user/admin, atur akses operasional,
+                  aktif-nonaktifkan akun, dan reset password bila diperlukan.
                 </p>
               </div>
 
@@ -459,8 +495,6 @@ async function handleChangeOperationalAccess(
                         const value = e.target.value as AccountRole
                         setNewRole(value)
                         if (value === "ADMIN") {
-                          setNewOperationalAccess("NONE")
-                        } else {
                           setNewOperationalAccess("NONE")
                         }
                       }}
@@ -514,13 +548,16 @@ async function handleChangeOperationalAccess(
                           Username
                         </th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600">
-                          Role
+                          Role Akun
                         </th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600">
-                          Akses
+                          Akses Operasional
                         </th>
                         <th className="px-4 py-3 text-left font-bold text-slate-600">
                           Status
+                        </th>
+                        <th className="px-4 py-3 text-left font-bold text-slate-600">
+                          Update
                         </th>
                         <th className="px-4 py-3 text-right font-bold text-slate-600">
                           Action
@@ -532,7 +569,7 @@ async function handleChangeOperationalAccess(
                       {users.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={5}
+                            colSpan={6}
                             className="px-4 py-8 text-center text-sm text-slate-500"
                           >
                             Belum ada user.
@@ -541,22 +578,44 @@ async function handleChangeOperationalAccess(
                       ) : (
                         users.map((u) => {
                           const active = u.is_active ?? true
+                          const currentRole =
+                            (u.role as AccountRole) === "ADMIN"
+                              ? "ADMIN"
+                              : "USER"
 
                           return (
                             <tr
                               key={u.id}
                               className="border-t border-slate-200 align-top"
                             >
-                              <td className="px-4 py-3 font-semibold text-slate-800">
-                                {u.username}
+                              <td className="px-4 py-3">
+                                <div className="font-semibold text-slate-800">
+                                  {u.username}
+                                </div>
+                                <div className="mt-1 text-[11px] text-slate-500">
+                                  Dibuat: {formatDateLabel(u.created_at)}
+                                </div>
                               </td>
 
                               <td className="px-4 py-3 text-slate-700">
-                                {u.role}
+                                <select
+                                  value={currentRole}
+                                  disabled={busy}
+                                  onChange={(e) =>
+                                    handleChangeRole(
+                                      u,
+                                      e.target.value as AccountRole
+                                    )
+                                  }
+                                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+                                >
+                                  <option value="USER">USER</option>
+                                  <option value="ADMIN">ADMIN</option>
+                                </select>
                               </td>
 
                               <td className="px-4 py-3 text-slate-700">
-                                {u.role === "ADMIN" ? (
+                                {currentRole === "ADMIN" ? (
                                   <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
                                     FULL ACCESS
                                   </span>
@@ -591,8 +650,12 @@ async function handleChangeOperationalAccess(
                                 </span>
                               </td>
 
+                              <td className="px-4 py-3 text-[11px] text-slate-500">
+                                {formatDateLabel(u.updated_at)}
+                              </td>
+
                               <td className="px-4 py-3">
-                                <div className="flex min-w-[210px] flex-wrap justify-end gap-2">
+                                <div className="flex min-w-[240px] flex-wrap justify-end gap-2">
                                   <button
                                     onClick={() => handleResetPassword(u)}
                                     disabled={busy}
@@ -633,8 +696,8 @@ async function handleChangeOperationalAccess(
                   Pantau & Reset Data
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Lihat isi database operasional dan lakukan reset data saat
-                  diperlukan.
+                  Lihat isi database operasional dan lakukan reset data seluruhnya
+                  atau berdasarkan range tanggal.
                 </p>
               </div>
 
@@ -685,13 +748,39 @@ async function handleChangeOperationalAccess(
                     Danger Zone
                   </h3>
                   <p className="text-sm leading-6 text-slate-600">
-                    Aksi ini akan menghapus seluruh data operasional dan semua
-                    file photo pada bucket storage. Pastikan data penting sudah
-                    dibackup sebelum melanjutkan.
+                    Bisa hapus seluruh data atau filter berdasarkan range tanggal.
+                    Jika tanggal dikosongkan, semua data operasional dan semua
+                    file photo akan dihapus.
                   </p>
                 </div>
 
-                <div className="mt-5">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-800">
+                      Tanggal mulai
+                    </label>
+                    <input
+                      type="date"
+                      value={resetStartDate}
+                      onChange={(e) => setResetStartDate(e.target.value)}
+                      className="w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-800">
+                      Tanggal akhir
+                    </label>
+                    <input
+                      type="date"
+                      value={resetEndDate}
+                      onChange={(e) => setResetEndDate(e.target.value)}
+                      className="w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-100"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4">
                   <label className="mb-1.5 block text-sm font-bold text-slate-800">
                     Ketik <span className="text-red-600">RESET</span> untuk
                     konfirmasi
@@ -709,7 +798,9 @@ async function handleChangeOperationalAccess(
                   disabled={busy}
                   className="mt-4 w-full rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-[0_12px_30px_rgba(220,38,38,0.20)] transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {busy ? "Memproses..." : "Reset Operasional + Hapus Photo"}
+                  {busy
+                    ? "Memproses..."
+                    : "Reset Operasional + Hapus Photo"}
                 </button>
               </div>
             </section>

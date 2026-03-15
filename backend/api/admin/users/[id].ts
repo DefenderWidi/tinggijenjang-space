@@ -45,6 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "OPTIONS") return res.status(200).end()
   if (!requireAdmin(req, res)) return
+
   if (req.method !== "PATCH") {
     return res.status(405).json({ error: "Method not allowed" })
   }
@@ -54,27 +55,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!id) return res.status(400).json({ error: "User id is required" })
 
     const body = parseBody(req)
-    if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
+    if (body === null) {
+      return res.status(400).json({ error: "Invalid JSON body" })
+    }
+
+    const {
+      data: existingUser,
+      error: existingUserError,
+    } = await supabaseAdmin
+      .from("app_users")
+      .select("id, username, role, operational_access")
+      .eq("id", id)
+      .single()
+
+    if (existingUserError || !existingUser) {
+      return res.status(404).json({ error: "User tidak ditemukan" })
+    }
 
     const patch: Record<string, any> = {
       updated_at: new Date().toISOString(),
     }
 
-    let nextRole: string | undefined
+    let nextRole = String(existingUser.role || "USER").toUpperCase()
+    let nextOperationalAccess = String(
+      existingUser.operational_access || "NONE"
+    ).toUpperCase()
 
     if (body.role != null) {
       const role = String(body.role).trim().toUpperCase()
+
       if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
         return res.status(400).json({ error: "Role tidak valid" })
       }
-      patch.role = role
+
       nextRole = role
+      patch.role = role
     }
 
-if (body.operational_access != null) {
-  const operationalAccess = String(body.operational_access)
-    .trim()
-    .toUpperCase()
+    if (body.operational_access != null) {
+      const operationalAccess = String(body.operational_access)
+        .trim()
+        .toUpperCase()
 
       if (
         !ALLOWED_OPERATIONAL_ACCESS.includes(
@@ -84,6 +105,7 @@ if (body.operational_access != null) {
         return res.status(400).json({ error: "Operational access tidak valid" })
       }
 
+      nextOperationalAccess = operationalAccess
       patch.operational_access = operationalAccess
     }
 
@@ -99,9 +121,10 @@ if (body.operational_access != null) {
       patch.password_hash = hashPassword(password)
     }
 
-    // kalau role diubah jadi ADMIN, paksa operational_access jadi NONE
     if (nextRole === "ADMIN") {
       patch.operational_access = "NONE"
+    } else if (body.operational_access == null) {
+      patch.operational_access = nextOperationalAccess
     }
 
     const { data, error } = await supabaseAdmin
@@ -114,6 +137,7 @@ if (body.operational_access != null) {
       .single()
 
     if (error) return res.status(500).json({ error: error.message })
+
     return res.status(200).json({ data })
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Internal error" })
