@@ -24,7 +24,7 @@ export const LIMIT_PRESET_M: Record<RefKey, number> = {
   B6020: 4,
   S3600: 8,
   B3600: 4,
-  S2500: 4,
+  S2500: 8,
   B2500: 4,
   B1250: 3,
   S4000: 8,

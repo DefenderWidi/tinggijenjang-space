@@ -433,64 +433,79 @@ const standardM = useMemo(() => {
   return getLimitM(measureMeta?.ref_unit ?? active?.ref_unit ?? null)
 }, [measureMeta?.ref_unit, active?.ref_unit])
 
-  async function send() {
-    if (!active) return
-    if (!allVerified) return
-    if (isSubmitting) return
+async function send() {
+  if (!active) return
+  if (!allVerified) return
+  if (isSubmitting) return
 
-    try {
-      setIsSubmitting(true)
-      setSubmitStatus("loading")
-      setSubmitMsg("Mengirim verifikasi & menyimpan hasil...")
+  try {
+    setIsSubmitting(true)
+    setSubmitStatus("loading")
+    setSubmitMsg("Mengirim verifikasi & menyimpan hasil...")
 
-      // 1) SIMPAN PER-TITIK
-      const payloadLines = lines.map((ln) => ({
-        label: ln.label,
-        height_m: ln.heightM ?? 0,
-        ok: lineVerify[ln.label] ?? null,
-      }))
-
-      const rLines = await fetch(`${API_BASE}/api/inspection-lines`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inspection_id: active.id,
-          lines: payloadLines,
-        }),
-      })
-      if (!rLines.ok) throw new Error(await rLines.text())
-
-      // 2) UPDATE SUMMARY INSPECTIONS
-      const okCount = Object.values(lineVerify).filter((v) => v === true).length
-
-      const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          review_status: "VALID",
-          reviewed_by: pjaName,
-          review_notes: notes || null,
-          lines_ok_count: okCount,
-        }),
-      })
-      if (!r.ok) throw new Error(await r.text())
-
-      setSubmitStatus("success")
-      setSubmitMsg("Verifikasi berhasil dikirim.")
-
-      await fetchInspections()
-
-      setTimeout(() => {
-        setSubmitStatus("idle")
-        closeDetail()
-      }, 2000)
-    } catch (e: any) {
-      setSubmitStatus("error")
-      setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi.")
-    } finally {
-      setIsSubmitting(false)
+    const missingHeight = lines.filter((ln) => ln.heightM == null)
+    if (missingHeight.length) {
+      throw new Error(
+        `Tinggi titik belum tersedia untuk: ${missingHeight.map((x) => x.label).join(", ")}`
+      )
     }
+
+    // 1) SIMPAN PER-TITIK
+    const payloadLines = lines.map((ln) => ({
+      label: ln.label,
+      height_m: ln.heightM as number,
+      ok: lineVerify[ln.label] ?? null,
+    }))
+
+    const rLines = await fetch(`${API_BASE}/api/inspection-lines`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inspection_id: active.id,
+        lines: payloadLines,
+      }),
+    })
+
+    const linesResult = await rLines.json().catch(() => null)
+    if (!rLines.ok) {
+      throw new Error(linesResult?.error || "Gagal menyimpan detail titik inspeksi")
+    }
+
+    // 2) UPDATE SUMMARY INSPECTIONS
+    const okCount = Object.values(lineVerify).filter((v) => v === true).length
+
+    const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        review_status: "VALID",
+        reviewed_by: pjaName,
+        review_notes: notes || null,
+        lines_ok_count: okCount,
+      }),
+    })
+
+    const result = await r.json().catch(() => null)
+    if (!r.ok) {
+      throw new Error(result?.error || "Gagal update status inspeksi")
+    }
+
+    setSubmitStatus("success")
+    setSubmitMsg("Verifikasi berhasil dikirim.")
+
+    await fetchInspections()
+
+    setTimeout(() => {
+      setSubmitStatus("idle")
+      closeDetail()
+    }, 2000)
+  } catch (e: any) {
+    setSubmitStatus("error")
+    setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi.")
+  } finally {
+    setIsSubmitting(false)
   }
+}
 
   return (
 

@@ -532,7 +532,7 @@ measurements.forEach((m, idx) => {
   if (!pixelPerMeter) return
   const meter = dist(m.p1, m.p2) / pixelPerMeter
   const danger = meter > maxBench
-  const label = m.label ?? labelFromIndex(idx)
+  const label = labelFromIndex(idx)
 
 drawLine(
   ctx,
@@ -587,19 +587,22 @@ const linesOkCount = meters.filter((x) => x <= maxBench).length
     return { maxHeightM, linesCount, linesOkCount }
   }
 
-  function buildLinePayload() {
-    if (!pixelPerMeter) return []
+function buildLinePayload() {
+  if (!pixelPerMeter) return []
 
-    return measurements.map((m, idx) => {
-      const label = m.label ?? labelFromIndex(idx)
+  return measurements
+    .map((m, idx) => {
+      const label = labelFromIndex(idx) // relabel ulang final
       const height_m = dist(m.p1, m.p2) / pixelPerMeter
+
       return {
         label,
-        height_m,      // ✅ snake_case sesuai API
-        ok: null as boolean | null, // inspector belum verifikasi, PJA yang isi
+        height_m,
+        ok: null as boolean | null,
       }
     })
-  }
+    .filter((x) => Number.isFinite(x.height_m) && x.height_m > 0.01)
+}
 
   async function canvasToFile(canvas: HTMLCanvasElement) {
     const blob: Blob = await new Promise((resolve, reject) => {
@@ -664,10 +667,15 @@ const linesOkCount = meters.filter((x) => x <= maxBench).length
   }
 
 async function saveInspectionLines(id: string) {
+  const rawCount = measurements.length
   const lines = buildLinePayload()
 
-  if (!lines.length) {
+  if (!rawCount) {
     throw new Error("Belum ada garis ukur untuk disimpan")
+  }
+
+  if (lines.length !== rawCount) {
+    throw new Error("Ada garis ukur tidak valid. Cek kembali line yang terlalu pendek / bertumpuk.")
   }
 
   const r = await fetch(`${API_BASE}/api/inspection-lines`, {
@@ -866,29 +874,35 @@ setSubmitMsg("")
       return
     }
 
-    setMeasurements((prev) => {
-      const idx = prev.findIndex((x) => x.id === drag.lineId)
-      if (idx < 0) return prev
+setMeasurements((prev) => {
+  const idx = prev.findIndex((x) => x.id === drag.lineId)
+  if (idx < 0) return prev
 
-      const copy = prev.map((x) => ({
-        ...x,
-        p1: { ...x.p1 },
-        p2: { ...x.p2 },
-      }))
-      const line = copy[idx]
+  const copy = prev.map((x) => ({
+    ...x,
+    p1: { ...x.p1 },
+    p2: { ...x.p2 },
+  }))
+  const line = copy[idx]
 
-      if (drag.which === "p1") line.p1 = updatePoint(line.p1, m)
-      else line.p2 = updatePoint(line.p2, m)
+  if (drag.which === "p1") line.p1 = updatePoint(line.p1, m)
+  else line.p2 = updatePoint(line.p2, m)
 
-      if (pixelPerMeter) {
-        const meter = dist(line.p1, line.p2) / pixelPerMeter
-        const deg = angleDeg(line.p1, line.p2)
-        setCurrentMeters(meter)
-        setCurrentDeg(deg)
-      }
+  const nextLenPx = dist(line.p1, line.p2)
+  if (nextLenPx <= 2) {
+    setHint("Garis terlalu pendek. Geser kembali endpoint.")
+    return prev
+  }
 
-      return copy
-    })
+  if (pixelPerMeter) {
+    const meter = dist(line.p1, line.p2) / pixelPerMeter
+    const deg = angleDeg(line.p1, line.p2)
+    setCurrentMeters(meter)
+    setCurrentDeg(deg)
+  }
+
+  return copy
+})
   }
 
   function onMouseUp() {
@@ -960,11 +974,18 @@ setSubmitMsg("")
     }
     if (!pixelPerMeter || measurements.length === 0) return
 
+    if (!imgSrc || !imgRef.current) {
+  setSubmitStatus("error")
+  setSubmitMsg("Foto inspeksi belum tersedia. Upload foto dulu sebelum submit.")
+  setHint("Submit gagal ❌ Foto inspeksi belum tersedia.")
+  return
+}
+
   try {
   setIsSubmitting(true)
   setSubmitStatus("loading")
   setSubmitMsg("Menyimpan inspeksi & mengunggah foto overlay...")
-  setHint("Submitting... (create inspection + upload measure)")
+setHint("Submitting... (create inspection + save lines + upload measure)")
 
       let id = inspectionId
       if (!id) {
@@ -972,13 +993,13 @@ setSubmitMsg("")
         setInspectionId(id)
       }
 
-await uploadMeasure(id)
-
 const savedLinesResult = await saveInspectionLines(id)
 
 if (!savedLinesResult?.data?.length) {
   throw new Error("Detail titik gagal tersimpan")
 }
+
+await uploadMeasure(id)
 
 setSubmitStatus("success")
 setSubmitMsg("Inspeksi berhasil tersimpan lengkap.")
@@ -1569,17 +1590,25 @@ onRetry={() => {
                 <button
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-50"
                   type="button"
-                 disabled={submitStatus === "loading" || !refSelected || !pixelPerMeter || measurements.length === 0}
-              title={
+                disabled={
+  submitStatus === "loading" ||
+  !imgSrc ||
+  !refSelected ||
+  !pixelPerMeter ||
+  measurements.length === 0
+}
+title={
   isSubmitting
     ? "Submitting..."
-    : !refSelected
-      ? "Pilih unit referensi dulu"
-      : !pixelPerMeter
-        ? "Kalibrasi dulu"
-        : measurements.length === 0
-          ? "Belum ada garis ukur"
-          : "Submit"
+    : !imgSrc
+      ? "Upload foto dulu"
+      : !refSelected
+        ? "Pilih unit referensi dulu"
+        : !pixelPerMeter
+          ? "Kalibrasi dulu"
+          : measurements.length === 0
+            ? "Belum ada garis ukur"
+            : "Submit"
 }
                   onClick={handleSubmit}
                 >
