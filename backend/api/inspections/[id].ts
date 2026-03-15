@@ -5,7 +5,7 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || "*"
   res.setHeader("Access-Control-Allow-Origin", origin)
   res.setHeader("Vary", "Origin")
-  res.setHeader("Access-Control-Allow-Methods", "GET,PATCH,OPTIONS")
+  res.setHeader("Access-Control-Allow-Methods", "GET,PATCH,DELETE,OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
@@ -62,7 +62,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body: any = parseBody(req)
     if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
 
-    // review_status hanya di-set kalau memang dikirim & valid
     const incomingStatus = body?.review_status
     const review_status: ReviewStatus | undefined =
       incomingStatus === "VALID" || incomingStatus === "REJECT" || incomingStatus === "PENDING"
@@ -73,7 +72,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (review_status !== undefined) payload.review_status = review_status
 
-    // ✅ penting: pakai "in" supaya null tetap bisa mengosongkan field
     if ("reviewed_by" in body) {
       payload.reviewed_by = body.reviewed_by ? String(body.reviewed_by) : null
     }
@@ -89,14 +87,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       payload.lines_ok_count = v
     }
 
-    // (opsional) kalau nanti mau update summary lain dari evaluator:
     if ("lines_count" in body) {
       const v = toIntNonNeg(body.lines_count)
       if (v === null) return res.status(400).json({ error: "lines_count must be a number" })
       payload.lines_count = v
     }
 
-    // (opsional) max_height_m kalau dibutuhkan
     if ("max_height_m" in body) {
       const n = typeof body.max_height_m === "number" ? body.max_height_m : Number(body.max_height_m)
       if (!Number.isFinite(n)) return res.status(400).json({ error: "max_height_m must be a number" })
@@ -118,6 +114,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!data) return res.status(404).json({ error: "Inspection not found" })
 
     return res.status(200).json({ data })
+  }
+
+  if (req.method === "DELETE") {
+    // 1) hapus detail lines
+    const delLines = await supabaseAdmin
+      .from("inspection_lines")
+      .delete()
+      .eq("inspection_id", id)
+
+    if (delLines.error) {
+      return res.status(500).json({ error: delLines.error.message })
+    }
+
+    // 2) hapus semua measures
+    const delMeasures = await supabaseAdmin
+      .from("inspection_measures")
+      .delete()
+      .eq("inspection_id", id)
+
+    if (delMeasures.error) {
+      return res.status(500).json({ error: delMeasures.error.message })
+    }
+
+    // 3) hapus inspection utama
+    const delInspection = await supabaseAdmin
+      .from("inspections")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle()
+
+    if (delInspection.error) {
+      return res.status(500).json({ error: delInspection.error.message })
+    }
+
+    if (!delInspection.data) {
+      return res.status(404).json({ error: "Inspection not found" })
+    }
+
+    return res.status(200).json({
+      success: true,
+      deleted_id: id,
+    })
   }
 
   return res.status(405).json({ error: "Method not allowed" })

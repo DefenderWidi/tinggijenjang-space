@@ -10,7 +10,7 @@ export default function BumaLoader() {
       </div>
 
       <div className="text-sm font-extrabold tracking-wide text-buma-text sm:text-[15px]">
-        Menyimpan Hasil
+        Memproses..
       </div>
 
       <div className="text-xs leading-relaxed text-buma-muted sm:text-sm">

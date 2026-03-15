@@ -252,6 +252,8 @@ export default function PjaDashboard() {
   const [submitMsg, setSubmitMsg] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const [isDeleting, setIsDeleting] = useState(false)
+
   // ===== fetch inspections =====
   async function fetchInspections() {
     setLoading(true)
@@ -507,6 +509,46 @@ async function send() {
   }
 }
 
+async function deleteInspection() {
+  if (!active) return
+  if (isDeleting) return
+
+  const ok = window.confirm(
+    `Hapus inspeksi ini?\n\nID: ${active.id}\nInspector: ${active.inspector}\nFront: ${active.front}\n\nData yang terhapus tidak bisa dikembalikan.`
+  )
+  if (!ok) return
+
+  try {
+    setIsDeleting(true)
+    setSubmitStatus("loading")
+    setSubmitMsg("Menghapus data inspeksi...")
+
+    const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
+      method: "DELETE",
+    })
+
+    const result = await r.json().catch(() => null)
+    if (!r.ok) {
+      throw new Error(result?.error || "Gagal menghapus inspeksi")
+    }
+
+    setSubmitStatus("success")
+    setSubmitMsg("Data inspeksi berhasil dihapus.")
+
+    await fetchInspections()
+
+    setTimeout(() => {
+      setSubmitStatus("idle")
+      closeDetail()
+    }, 1200)
+  } catch (e: any) {
+    setSubmitStatus("error")
+    setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala saat menghapus data.")
+  } finally {
+    setIsDeleting(false)
+  }
+}
+
   return (
 
     <AppLayout>
@@ -551,11 +593,11 @@ async function send() {
               <div>
                 <div className="text-xs font-semibold uppercase tracking-widest text-white/70">PJA Console</div>
                 <div className="mt-1 text-xl font-extrabold text-white">Dashboard Verifikasi Tinggi Jenjang</div>
-                <div className="mt-1 text-sm text-white/80">Menampilkan hasil submit inspector (summary + foto overlay).</div>
+                <div className="mt-1 text-sm text-white/80">Menampilkan hasil submit inspector.</div>
               </div>
 
               <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-right backdrop-blur">
-                <div className="text-xs text-white/70">Logged in as</div>
+                <div className="text-xs text-white/70">Login sebagai</div>
                 <div className="text-sm font-extrabold text-white">{pjaName}</div>
               </div>
             </div>
@@ -569,9 +611,6 @@ async function send() {
               </span>
               <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-extrabold text-white/85 backdrop-blur">
                 Reject: {counts.REJECT}
-              </span>
-              <span className="ml-auto rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-extrabold text-white/85 backdrop-blur">
-                Limit referensi: {standardM.toFixed(1)} m
               </span>
             </div>
           </div>
@@ -1025,31 +1064,41 @@ async function send() {
 
               {/* footer */}
               <div className="sticky bottom-0 z-10 border-t border-buma-border bg-white/95 px-4 py-3 md:px-5">
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={closeDetail}
-                    className="rounded-xl border border-buma-border bg-white px-4 py-2.5 text-sm font-extrabold text-buma-text hover:bg-black/5"
-                  >
-                    Batal
-                  </button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+  <button
+    type="button"
+    onClick={() => void deleteInspection()}
+    disabled={isDeleting || isSubmitting || submitStatus === "loading"}
+    className="rounded-xl border border-red-500/25 bg-red-50 px-4 py-2.5 text-sm font-extrabold text-red-600 hover:bg-red-100 disabled:opacity-40"
+    title={isDeleting ? "Menghapus..." : "Hapus inspeksi ini"}
+  >
+    {isDeleting ? "Menghapus..." : "Hapus"}
+  </button>
 
-                  <button
-                    type="button"
-                    disabled={!allVerified || isSubmitting || submitStatus === "loading"}
-                    onClick={() => void send()}
-                    className="rounded-xl bg-gradient-to-r from-[#2D5EFC] to-buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-40"
-                    title={
-                      !allVerified
-                        ? "Semua titik harus diverifikasi (Sesuai / Tidak sesuai)"
-                        : isSubmitting
-                          ? "Mengirim..."
-                          : "Kirim verifikasi"
-                    }
-                  >
-                    {isSubmitting ? "Mengirim..." : "Kirim"}
-                  </button>
-                </div>
+  <button
+    type="button"
+    onClick={closeDetail}
+    className="rounded-xl border border-buma-border bg-white px-4 py-2.5 text-sm font-extrabold text-buma-text hover:bg-black/5"
+  >
+    Batal
+  </button>
+
+  <button
+    type="button"
+    disabled={!allVerified || isSubmitting || isDeleting || submitStatus === "loading"}
+    onClick={() => void send()}
+    className="rounded-xl bg-gradient-to-r from-[#2D5EFC] to-buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-40"
+    title={
+      !allVerified
+        ? "Semua titik harus diverifikasi (Sesuai / Tidak sesuai)"
+        : isSubmitting
+          ? "Mengirim..."
+          : "Kirim verifikasi"
+    }
+  >
+    {isSubmitting ? "Mengirim..." : "Kirim"}
+  </button>
+</div>
 
                 {!allVerified ? (
                   <div className="mt-2 text-xs text-buma-muted">

@@ -30,53 +30,6 @@ function SectionTitle({
   )
 }
 
-function StatPill({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: string
-  tone?: "ok" | "warn" | "info"
-}) {
-  const cls =
-    tone === "ok"
-      ? "bg-gradient-to-r from-buma-green/10 to-buma-green/5 text-buma-green border-buma-green/20"
-      : tone === "warn"
-        ? "bg-gradient-to-r from-buma-orange/10 to-buma-orange/5 text-buma-orange border-buma-orange/20"
-        : "bg-gradient-to-r from-[#2D5EFC]/10 to-buma-blue/5 text-buma-blue border-buma-blue/20"
-
-  return (
-    <div className={`rounded-xl border px-3 py-2 ${cls}`}>
-      <div className="text-[10px] uppercase tracking-widest opacity-80">
-        {label}
-      </div>
-      <div className="text-sm font-extrabold">{value}</div>
-    </div>
-  )
-}
-
-function IconButton({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string
-  icon: string
-  onClick?: () => void
-}) {
-  return (
-    <button
-      className="grid h-11 w-11 place-items-center rounded-xl border border-buma-border bg-white/90 shadow-soft hover:bg-black/5"
-      title={label}
-      type="button"
-      onClick={onClick}
-    >
-      <span className="text-lg leading-none">{icon}</span>
-    </button>
-  )
-}
-
 function SubmitResultCard({
   variant,
   title,
@@ -96,9 +49,9 @@ function SubmitResultCard({
 
   return (
     <div className="flex w-full max-w-[340px] flex-col items-center justify-center gap-3 text-center sm:max-w-[380px]">
-<div className="grid h-16 w-16 place-items-center sm:h-20 sm:w-20">
-  {icon ? icon : ok ? <BumaCheck size="md" /> : <BumaCross size="md" />}
-</div>
+      <div className="grid h-16 w-16 place-items-center sm:h-20 sm:w-20">
+        {icon ? icon : ok ? <BumaCheck size="md" /> : <BumaCross size="md" />}
+      </div>
 
       <div className="text-sm font-extrabold tracking-wide text-buma-text sm:text-[15px]">
         {title}
@@ -110,25 +63,25 @@ function SubmitResultCard({
         </div>
       ) : null}
 
-<div className="mt-1 flex flex-wrap items-center justify-center gap-2">
-  {onRetry ? (
-    <button
-      type="button"
-      className="rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2 text-xs font-extrabold text-white shadow-soft transition active:scale-95 hover:opacity-85"
-      onClick={onRetry}
-    >
-      Coba Lagi
-    </button>
-  ) : null}
+      <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+        {onRetry ? (
+          <button
+            type="button"
+            className="rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2 text-xs font-extrabold text-white shadow-soft transition active:scale-95 hover:opacity-85"
+            onClick={onRetry}
+          >
+            Coba Lagi
+          </button>
+        ) : null}
 
-  <button
-    type="button"
-    className="rounded-xl border border-buma-border bg-white px-4 py-2 text-xs font-extrabold text-buma-text shadow-soft transition active:scale-95 hover:bg-black/5"
-    onClick={onClose}
-  >
-    Tutup
-  </button>
-</div>
+        <button
+          type="button"
+          className="rounded-xl border border-buma-border bg-white px-4 py-2 text-xs font-extrabold text-buma-text shadow-soft transition active:scale-95 hover:bg-black/5"
+          onClick={onClose}
+        >
+          Tutup
+        </button>
+      </div>
     </div>
   )
 }
@@ -155,11 +108,6 @@ function dist(a: Pt, b: Pt) {
 function near(a: Pt, b: Pt) {
   return dist(a, b) < NEAR
 }
-function angleDeg(a: Pt, b: Pt) {
-  const dy = Math.abs(b.y - a.y)
-  const dx = Math.abs(b.x - a.x)
-  return (Math.atan2(dy, dx) * 180) / Math.PI
-}
 
 function rectOverlap(a: BadgeRect, b: BadgeRect, pad = 6) {
   return !(
@@ -179,7 +127,7 @@ export default function Measure() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
-  
+
   // ======= State =======
   const [imgSrc, setImgSrc] = useState<string>("")
   const [mode, setMode] = useState<"kalibrasi" | "ukur">("kalibrasi")
@@ -187,25 +135,25 @@ export default function Measure() {
     "vertical" | "horizontal" | "free"
   >("vertical")
 
-const [refMeterStr, setRefMeterStr] = useState<string>("")
-const [refKey, setRefKey] = useState<RefKey | "">("")
-const refSelected = refKey !== ""
+  const [refMeterStr, setRefMeterStr] = useState<string>("")
+  const [refKey, setRefKey] = useState<RefKey | "">("")
+  const refSelected = refKey !== ""
 
-const refMeter = useMemo(() => {
-  if (!refSelected) return 0
-  const n = Number(refMeterStr)
-  return Number.isFinite(n) && n > 0 ? n : 0
-}, [refMeterStr, refSelected])
+  const refMeter = useMemo(() => {
+    if (!refSelected) return 0
+    const n = Number(refMeterStr)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  }, [refMeterStr, refSelected])
 
-const maxBench = useMemo(() => getLimitM(refKey || null), [refKey])
+  const maxBench = useMemo(() => getLimitM(refKey || null), [refKey])
 
-useEffect(() => {
-  if (!refKey) {
-    setRefMeterStr("")
-    return
-  }
-  setRefMeterStr(REF_PRESET_M[refKey].toFixed(2))
-}, [refKey])
+  useEffect(() => {
+    if (!refKey) {
+      setRefMeterStr("")
+      return
+    }
+    setRefMeterStr(REF_PRESET_M[refKey].toFixed(2))
+  }, [refKey])
 
   // shift time (pelaksanaan) + shift (DAY/NIGHT)
   const [shift, setShift] = useState<"" | Shift>("")
@@ -222,21 +170,6 @@ useEffect(() => {
     kind: "ref" | "m"
   } | null>(null)
 
-  const [currentMeters, setCurrentMeters] = useState<number | null>(null)
-  const [currentDeg, setCurrentDeg] = useState<number | null>(null)
-
-  const [hint, setHint] = useState<string>(
-    "Lengkapi data inspeksi → Upload foto → Kalibrasi → Ukur → Submit."
-  )
-
-  const [view, setView] = useState({ scale: 1, x: 0, y: 0 })
-  const clamp = (v: number, min: number, max: number) =>
-    Math.min(max, Math.max(min, v))
-  const zoomBy = (factor: number) => {
-    setView((prev) => ({ ...prev, scale: clamp(prev.scale * factor, 0.5, 4) }))
-  }
-  const resetView = () => setView({ scale: 1, x: 0, y: 0 })
-
   const [inspectorName, setInspectorName] = useState("")
   const [areaId, setAreaId] = useState("")
 
@@ -249,8 +182,8 @@ useEffect(() => {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   type SubmitStatus = "idle" | "loading" | "success" | "error"
-const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle")
-const [submitMsg, setSubmitMsg] = useState<string>("")
+  const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle")
+  const [submitMsg, setSubmitMsg] = useState<string>("")
 
   const isFormValid =
     inspectorName.trim() !== "" &&
@@ -265,22 +198,19 @@ const [submitMsg, setSubmitMsg] = useState<string>("")
   })
 
   // ======= Helpers =======
-  function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
-    const canvas = canvasRef.current
-    if (!canvas) return { x: 0, y: 0 }
+function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
+  const canvas = canvasRef.current
+  if (!canvas) return { x: 0, y: 0 }
 
-    const r = canvas.getBoundingClientRect()
-    const mx = e.clientX - r.left
-    const my = e.clientY - r.top
+  const r = canvas.getBoundingClientRect()
+  const mx = e.clientX - r.left
+  const my = e.clientY - r.top
 
-    const ux = (mx - view.x) / view.scale
-    const uy = (my - view.y) / view.scale
-
-    return {
-      x: (ux * canvas.width) / r.width,
-      y: (uy * canvas.height) / r.height,
-    }
+  return {
+    x: (mx * canvas.width) / r.width,
+    y: (my * canvas.height) / r.height,
   }
+}
 
   function applyOrientation(p: Pt, anchor?: Pt): Pt {
     if (!anchor) return p
@@ -323,177 +253,177 @@ const [submitMsg, setSubmitMsg] = useState<string>("")
     if (stroke) ctx.stroke()
   }
 
-function drawLine(
-  ctx: CanvasRenderingContext2D,
-  a: Pt,
-  b: Pt,
-  label: string,
-  text: string,
-  tone: "measure" | "ref",
-  occupiedBadges: BadgeRect[],
-  danger = false
-) {
-const colors =
-  tone === "ref"
-    ? { core: "#16A34A", glow: "rgba(22,163,74,.25)" }
-    : danger
-      ? { core: "#DC2626", glow: "rgba(220,38,38,.18)" }
-      : { core: "#2563EB", glow: "rgba(37,99,235,.18)" }
+  function drawLine(
+    ctx: CanvasRenderingContext2D,
+    a: Pt,
+    b: Pt,
+    label: string,
+    text: string,
+    tone: "measure" | "ref",
+    occupiedBadges: BadgeRect[],
+    danger = false
+  ) {
+    const colors =
+      tone === "ref"
+        ? { core: "#16A34A", glow: "rgba(22,163,74,.25)" }
+        : danger
+          ? { core: "#DC2626", glow: "rgba(220,38,38,.18)" }
+          : { core: "#2563EB", glow: "rgba(37,99,235,.18)" }
 
-  ctx.save()
-  ctx.lineCap = "round"
-  ctx.lineJoin = "round"
+    ctx.save()
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
 
-  // line glow
-  ctx.strokeStyle = colors.glow
-  ctx.lineWidth = 12
-  ctx.beginPath()
-  ctx.moveTo(a.x, a.y)
-  ctx.lineTo(b.x, b.y)
-  ctx.stroke()
+    // line glow
+    ctx.strokeStyle = colors.glow
+    ctx.lineWidth = 12
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
 
-  // line shadow
-  ctx.strokeStyle = "rgba(0,0,0,.55)"
-  ctx.lineWidth = 7
-  ctx.beginPath()
-  ctx.moveTo(a.x, a.y)
-  ctx.lineTo(b.x, b.y)
-  ctx.stroke()
+    // line shadow
+    ctx.strokeStyle = "rgba(0,0,0,.55)"
+    ctx.lineWidth = 7
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
 
-  // line core
-  ctx.strokeStyle = colors.core
-  ctx.lineWidth = 4
-  ctx.beginPath()
-  ctx.moveTo(a.x, a.y)
-  ctx.lineTo(b.x, b.y)
-  ctx.stroke()
+    // line core
+    ctx.strokeStyle = colors.core
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
 
-  // endpoints
-  drawPoint(ctx, a.x, a.y, "#FFFFFF")
-  ctx.strokeStyle = "rgba(0,0,0,.55)"
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  ctx.arc(a.x, a.y, HIT_R + 2, 0, Math.PI * 2)
-  ctx.stroke()
+    // endpoints
+    drawPoint(ctx, a.x, a.y, "#FFFFFF")
+    ctx.strokeStyle = "rgba(0,0,0,.55)"
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(a.x, a.y, HIT_R + 2, 0, Math.PI * 2)
+    ctx.stroke()
 
-  drawPoint(ctx, b.x, b.y, "#FFFFFF")
-  ctx.beginPath()
-  ctx.arc(b.x, b.y, HIT_R + 2, 0, Math.PI * 2)
-  ctx.stroke()
+    drawPoint(ctx, b.x, b.y, "#FFFFFF")
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, HIT_R + 2, 0, Math.PI * 2)
+    ctx.stroke()
 
-  // compact badge position
-ctx.font = "900 11px Arial"
-const tagW = ctx.measureText(label).width
+    // compact badge position
+    ctx.font = "900 11px Arial"
+    const tagW = ctx.measureText(label).width
 
-ctx.font = "800 11px Arial"
-const txtW = ctx.measureText(text).width
+    ctx.font = "800 11px Arial"
+    const txtW = ctx.measureText(text).width
 
-const chipW = Math.max(18, tagW + 8)
-const textPadLeft = 7
-const textPadRight = 8
-const gap = 4
-const w = chipW + gap + txtW + textPadLeft + textPadRight + 8
-const h = 26
+    const chipW = Math.max(18, tagW + 8)
+    const textPadLeft = 7
+    const textPadRight = 8
+    const gap = 4
+    const w = chipW + gap + txtW + textPadLeft + textPadRight + 8
+    const h = 26
 
-const topPt = a.y <= b.y ? a : b
-const bottomPt = a.y > b.y ? a : b
+    const topPt = a.y <= b.y ? a : b
+    const bottomPt = a.y > b.y ? a : b
 
-const mx = (a.x + b.x) / 2
-let bx = mx - w / 2
-bx = Math.max(8, Math.min(bx, ctx.canvas.width - w - 8))
+    const mx = (a.x + b.x) / 2
+    let bx = mx - w / 2
+    bx = Math.max(8, Math.min(bx, ctx.canvas.width - w - 8))
 
-const safeGap = 12
-const laneStep = h + 6
+    const safeGap = 12
+    const laneStep = h + 6
 
-let by = topPt.y - h - safeGap
-let placed = false
+    let by = topPt.y - h - safeGap
+    let placed = false
 
-// prioritas slot:
-// atas dekat -> bawah dekat -> atas level 2 -> bawah level 2 -> dst
-const candidates: number[] = []
-for (let level = 0; level < 4; level++) {
-  const topY = topPt.y - h - safeGap - level * laneStep
-  const bottomY = bottomPt.y + safeGap + level * laneStep
+    // prioritas slot:
+    // atas dekat -> bawah dekat -> atas level 2 -> bawah level 2 -> dst
+    const candidates: number[] = []
+    for (let level = 0; level < 4; level++) {
+      const topY = topPt.y - h - safeGap - level * laneStep
+      const bottomY = bottomPt.y + safeGap + level * laneStep
 
-  candidates.push(topY)
-  candidates.push(bottomY)
-}
+      candidates.push(topY)
+      candidates.push(bottomY)
+    }
 
-for (const tryY of candidates) {
-  // skip kalau keluar canvas
-  if (tryY < 8 || tryY + h > ctx.canvas.height - 8) continue
+    for (const tryY of candidates) {
+      // skip kalau keluar canvas
+      if (tryY < 8 || tryY + h > ctx.canvas.height - 8) continue
 
-  const rect = { x: bx, y: tryY, w, h }
-  const hit = occupiedBadges.some((r) => rectOverlap(rect, r, 6))
+      const rect = { x: bx, y: tryY, w, h }
+      const hit = occupiedBadges.some((r) => rectOverlap(rect, r, 6))
 
-  if (!hit) {
-    by = tryY
-    occupiedBadges.push(rect)
-    placed = true
-    break
+      if (!hit) {
+        by = tryY
+        occupiedBadges.push(rect)
+        placed = true
+        break
+      }
+    }
+
+    // fallback terakhir kalau semua tabrakan
+    if (!placed) {
+      const fallbackRect = { x: bx, y: by, w, h }
+      occupiedBadges.push(fallbackRect)
+    }
+
+    // leader line: badge ke titik atas / bawah garis
+    const badgeCenterX = bx + w / 2
+    const badgeBottomY = by + h
+    const badgeTopY = by
+
+    const anchorPt =
+      by < topPt.y
+        ? { x: topPt.x, y: topPt.y - 2 }     // badge di atas, arahkan ke titik atas
+        : { x: bottomPt.x, y: bottomPt.y + 2 } // badge di bawah, arahkan ke titik bawah
+
+    const startPt =
+      by < topPt.y
+        ? { x: badgeCenterX, y: badgeBottomY }
+        : { x: badgeCenterX, y: badgeTopY }
+
+    ctx.save()
+    ctx.strokeStyle = tone === "ref" ? "rgba(22,163,74,.55)" : `${colors.core}88`
+    ctx.lineWidth = 1.2
+    ctx.setLineDash([4, 4])
+    ctx.beginPath()
+    ctx.moveTo(startPt.x, startPt.y)
+    ctx.lineTo(anchorPt.x, anchorPt.y)
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.restore()
+
+    // outer white pill
+    ctx.fillStyle = "rgba(255,255,255,.94)"
+    ctx.strokeStyle = danger ? "rgba(220,38,38,.55)" : "rgba(0,0,0,.18)"
+    ctx.lineWidth = danger ? 1.5 : 1
+    roundRect(ctx, bx, by, w, h, 999, true, true)
+
+    // colored label chip
+    ctx.fillStyle = colors.core
+    roundRect(ctx, bx + 4, by + 4, chipW, h - 8, 999, true, false)
+
+    // label text
+    ctx.fillStyle = "#FFFFFF"
+    ctx.font = "900 11px Arial"
+    ctx.textBaseline = "middle"
+    ctx.fillText(label, bx + 4 + (chipW - tagW) / 2, by + h / 2 + 0.5)
+
+    // value text
+    ctx.font = "800 11px Arial"
+    ctx.strokeStyle = "rgba(255,255,255,.92)"
+    ctx.lineWidth = 2.5
+    const textX = bx + 4 + chipW + gap + textPadLeft
+    const textY = by + h / 2 + 0.5
+    ctx.strokeText(text, textX, textY)
+    ctx.fillStyle = danger ? "#B91C1C" : "#0B1220"
+    ctx.fillText(text, textX, textY)
+
+    ctx.restore()
   }
-}
-
-// fallback terakhir kalau semua tabrakan
-if (!placed) {
-  const fallbackRect = { x: bx, y: by, w, h }
-  occupiedBadges.push(fallbackRect)
-}
-
-  // leader line: badge ke titik atas / bawah garis
-  const badgeCenterX = bx + w / 2
-  const badgeBottomY = by + h
-  const badgeTopY = by
-
-  const anchorPt =
-    by < topPt.y
-      ? { x: topPt.x, y: topPt.y - 2 }     // badge di atas, arahkan ke titik atas
-      : { x: bottomPt.x, y: bottomPt.y + 2 } // badge di bawah, arahkan ke titik bawah
-
-  const startPt =
-    by < topPt.y
-      ? { x: badgeCenterX, y: badgeBottomY }
-      : { x: badgeCenterX, y: badgeTopY }
-
-  ctx.save()
-   ctx.strokeStyle = tone === "ref" ? "rgba(22,163,74,.55)" : `${colors.core}88`
-  ctx.lineWidth = 1.2
-  ctx.setLineDash([4, 4])
-  ctx.beginPath()
-  ctx.moveTo(startPt.x, startPt.y)
-  ctx.lineTo(anchorPt.x, anchorPt.y)
-  ctx.stroke()
-  ctx.setLineDash([])
-  ctx.restore()
-
-  // outer white pill
-  ctx.fillStyle = "rgba(255,255,255,.94)"
-  ctx.strokeStyle = danger ? "rgba(220,38,38,.55)" : "rgba(0,0,0,.18)"
-  ctx.lineWidth = danger ? 1.5 : 1
-  roundRect(ctx, bx, by, w, h, 999, true, true)
-
-  // colored label chip
-  ctx.fillStyle = colors.core
-  roundRect(ctx, bx + 4, by + 4, chipW, h - 8, 999, true, false)
-
-  // label text
-  ctx.fillStyle = "#FFFFFF"
-  ctx.font = "900 11px Arial"
-  ctx.textBaseline = "middle"
-  ctx.fillText(label, bx + 4 + (chipW - tagW) / 2, by + h / 2 + 0.5)
-
-  // value text
-  ctx.font = "800 11px Arial"
-  ctx.strokeStyle = "rgba(255,255,255,.92)"
-  ctx.lineWidth = 2.5
- const textX = bx + 4 + chipW + gap + textPadLeft
-  const textY = by + h / 2 + 0.5
-  ctx.strokeText(text, textX, textY)
-  ctx.fillStyle = danger ? "#B91C1C" : "#0B1220"
-  ctx.fillText(text, textX, textY)
-
-  ctx.restore()
-}
 
   function redraw() {
     const canvas = canvasRef.current
@@ -516,35 +446,35 @@ if (!placed) {
     const occupiedBadges: BadgeRect[] = []
 
     if (referenceLine) {
-drawLine(
-  ctx,
-  referenceLine.p1,
-  referenceLine.p2,
-  "REF",
-  `${refMeter.toFixed(2)} m`,
-  "ref",
-  occupiedBadges,
-  false
-)
+      drawLine(
+        ctx,
+        referenceLine.p1,
+        referenceLine.p2,
+        "REF",
+        `${refMeter.toFixed(2)} m`,
+        "ref",
+        occupiedBadges,
+        false
+      )
     }
 
-measurements.forEach((m, idx) => {
-  if (!pixelPerMeter) return
-  const meter = dist(m.p1, m.p2) / pixelPerMeter
-  const danger = meter > maxBench
-  const label = labelFromIndex(idx)
+    measurements.forEach((m, idx) => {
+      if (!pixelPerMeter) return
+      const meter = dist(m.p1, m.p2) / pixelPerMeter
+      const danger = meter > maxBench
+      const label = labelFromIndex(idx)
 
-drawLine(
-  ctx,
-  m.p1,
-  m.p2,
-  label,
-  `${meter.toFixed(2)} m`,
-  "measure",
-  occupiedBadges,
-  danger
-)
-})
+      drawLine(
+        ctx,
+        m.p1,
+        m.p2,
+        label,
+        `${meter.toFixed(2)} m`,
+        "measure",
+        occupiedBadges,
+        danger
+      )
+    })
 
     if (tempPoints.length === 1) {
       const p = tempPoints[0]
@@ -567,9 +497,6 @@ drawLine(
     if (img && img.naturalWidth && img.naturalHeight) {
       const ratio = img.naturalWidth / img.naturalHeight
       targetW = Math.round(targetH * ratio)
-
-      // optional: batasin biar ga kegedean banget
-      targetW = clamp(targetW, 560, 3200)
     }
 
     if (canvas.width !== targetW) canvas.width = targetW
@@ -583,26 +510,26 @@ drawLine(
     const meters = measurements.map((m) => dist(m.p1, m.p2) / pixelPerMeter)
     const maxHeightM = meters.length ? Math.max(...meters) : 0
     const linesCount = meters.length
-const linesOkCount = meters.filter((x) => x <= maxBench).length
+    const linesOkCount = meters.filter((x) => x <= maxBench).length
     return { maxHeightM, linesCount, linesOkCount }
   }
 
-function buildLinePayload() {
-  if (!pixelPerMeter) return []
+  function buildLinePayload() {
+    if (!pixelPerMeter) return []
 
-  return measurements
-    .map((m, idx) => {
-      const label = labelFromIndex(idx) // relabel ulang final
-      const height_m = dist(m.p1, m.p2) / pixelPerMeter
+    return measurements
+      .map((m, idx) => {
+        const label = labelFromIndex(idx) // relabel ulang final
+        const height_m = dist(m.p1, m.p2) / pixelPerMeter
 
-      return {
-        label,
-        height_m,
-        ok: null as boolean | null,
-      }
-    })
-    .filter((x) => Number.isFinite(x.height_m) && x.height_m > 0.01)
-}
+        return {
+          label,
+          height_m,
+          ok: null as boolean | null,
+        }
+      })
+      .filter((x) => Number.isFinite(x.height_m) && x.height_m > 0.01)
+  }
 
   async function canvasToFile(canvas: HTMLCanvasElement) {
     const blob: Blob = await new Promise((resolve, reject) => {
@@ -666,43 +593,43 @@ function buildLinePayload() {
     return r.json()
   }
 
-async function saveInspectionLines(id: string) {
-  const rawCount = measurements.length
-  const lines = buildLinePayload()
+  async function saveInspectionLines(id: string) {
+    const rawCount = measurements.length
+    const lines = buildLinePayload()
 
-  if (!rawCount) {
-    throw new Error("Belum ada garis ukur untuk disimpan")
+    if (!rawCount) {
+      throw new Error("Belum ada garis ukur untuk disimpan")
+    }
+
+    if (lines.length !== rawCount) {
+      throw new Error("Ada garis ukur tidak valid. Cek kembali line yang terlalu pendek / bertumpuk.")
+    }
+
+    const r = await fetch(`${API_BASE}/api/inspection-lines`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inspection_id: id,
+        lines,
+      }),
+    })
+
+    const result = await r.json().catch(() => null)
+
+    if (!r.ok) {
+      throw new Error(result?.error || "Gagal menyimpan detail titik inspeksi")
+    }
+
+    const savedLines = Array.isArray(result?.data) ? result.data : []
+
+    if (savedLines.length !== lines.length) {
+      throw new Error(
+        `Detail titik tidak tersimpan lengkap (${savedLines.length}/${lines.length})`
+      )
+    }
+
+    return result
   }
-
-  if (lines.length !== rawCount) {
-    throw new Error("Ada garis ukur tidak valid. Cek kembali line yang terlalu pendek / bertumpuk.")
-  }
-
-  const r = await fetch(`${API_BASE}/api/inspection-lines`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      inspection_id: id,
-      lines,
-    }),
-  })
-
-  const result = await r.json().catch(() => null)
-
-  if (!r.ok) {
-    throw new Error(result?.error || "Gagal menyimpan detail titik inspeksi")
-  }
-
-  const savedLines = Array.isArray(result?.data) ? result.data : []
-
-  if (savedLines.length !== lines.length) {
-    throw new Error(
-      `Detail titik tidak tersimpan lengkap (${savedLines.length}/${lines.length})`
-    )
-  }
-
-  return result
-}
 
   // ======= Upload =======
   async function onPickFile(file?: File) {
@@ -721,17 +648,12 @@ async function saveInspectionLines(id: string) {
       setReferenceLine(null)
       setMeasurements([])
       setTempPoints([])
-      setCurrentMeters(null)
-      setCurrentDeg(null)
       setDrag(null)
       setInspectionId(null) // foto baru -> inspection baru
       setSubmitStatus("idle")
-setSubmitMsg("")
-
-      resetView()
+      setSubmitMsg("")
 
       setMode("kalibrasi")
-      setHint("Mode Kalibrasi: klik 2 titik pada objek referensi.")
       redraw()
     }
     img.src = url
@@ -742,30 +664,22 @@ setSubmitMsg("")
     const px = dist(p1, p2)
     if (px <= 0.0001) return
 
-  if (mode === "kalibrasi") {
-  if (!refSelected || refMeter <= 0) {
-    setCalError(true)
-    setHint("Pilih unit referensi dulu sebelum kalibrasi.")
-    return
-  }
+    if (mode === "kalibrasi") {
+      if (!refSelected || refMeter <= 0) {
+        setCalError(true)
+        return
+      }
 
-  const ppm = px / refMeter
-  setPixelPerMeter(ppm)
-  setReferenceLine({ p1, p2, id: "ref" })
-  setHint(`Kalibrasi OK. Scale = ${ppm.toFixed(2)} px/m. Pindah ke mode Ukur.`)
-} else {
+      const ppm = px / refMeter
+      setPixelPerMeter(ppm)
+      setReferenceLine({ p1, p2, id: "ref" })
+    } else {
       if (!pixelPerMeter) {
-        setHint("Skala belum ada. Kalibrasi dulu (set 2 titik referensi).")
         return
       }
       const label = labelFromIndex(measurements.length)
       const line: Line = { p1, p2, id: `${Date.now()}-${Math.random()}`, label }
-      const meter = px / pixelPerMeter
-      const deg = angleDeg(p1, p2)
       setMeasurements((prev) => [...prev, line])
-      setCurrentMeters(meter)
-      setCurrentDeg(deg)
-      setHint("Ukur: klik 2 titik lagi untuk ukur jenjang berikutnya. Drag titik untuk adjust.")
     }
   }
 
@@ -773,16 +687,12 @@ setSubmitMsg("")
   function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
     ensureCanvasSize()
 
-    if (!imgRef.current) {
-      setHint("Upload foto dulu. Klik Import Photo (Source).")
-      return
-    }
+    if (!imgRef.current) return
 
     if (mode === "kalibrasi" && !refSelected) {
-  setCalError(true)
-  setHint("Pilih unit referensi dulu sebelum menentukan 2 titik kalibrasi.")
-  return
-}
+      setCalError(true)
+      return
+    }
 
     if (e.button === 2) return
 
@@ -792,12 +702,10 @@ setSubmitMsg("")
       const line = measurements[i]
       if (near(m, line.p1)) {
         setDrag({ lineId: line.id, which: "p1", kind: "m" })
-        setHint("Drag endpoint untuk adjust garis ukur.")
         return
       }
       if (near(m, line.p2)) {
         setDrag({ lineId: line.id, which: "p2", kind: "m" })
-        setHint("Drag endpoint untuk adjust garis ukur.")
         return
       }
     }
@@ -805,12 +713,10 @@ setSubmitMsg("")
     if (referenceLine) {
       if (near(m, referenceLine.p1)) {
         setDrag({ lineId: "ref", which: "p1", kind: "ref" })
-        setHint("Drag endpoint referensi untuk re-kalibrasi.")
         return
       }
       if (near(m, referenceLine.p2)) {
         setDrag({ lineId: "ref", which: "p2", kind: "ref" })
-        setHint("Drag endpoint referensi untuk re-kalibrasi.")
         return
       }
     }
@@ -843,9 +749,8 @@ setSubmitMsg("")
 
     if (drag.kind === "ref") {
       if (!refSelected || refMeter <= 0) {
-  setHint("Pilih unit referensi yang valid sebelum mengubah kalibrasi.")
-  return
-}
+        return
+      }
 
       setReferenceLine((prev) => {
         if (!prev) return prev
@@ -859,7 +764,6 @@ setSubmitMsg("")
           const px = dist(p1, p2)
           const ppm = px / refMeter
           setPixelPerMeter(ppm)
-          setHint(`Re-kalibrasi: Scale = ${ppm.toFixed(2)} px/m`)
         } else {
           const moved = updatePoint(prev.p2, m)
           p2.x = moved.x
@@ -867,42 +771,35 @@ setSubmitMsg("")
           const px = dist(p1, p2)
           const ppm = px / refMeter
           setPixelPerMeter(ppm)
-          setHint(`Re-kalibrasi: Scale = ${ppm.toFixed(2)} px/m`)
         }
         return { ...prev, p1, p2 }
       })
       return
     }
 
-setMeasurements((prev) => {
-  const idx = prev.findIndex((x) => x.id === drag.lineId)
-  if (idx < 0) return prev
+    setMeasurements((prev) => {
+      const idx = prev.findIndex((x) => x.id === drag.lineId)
+      if (idx < 0) return prev
 
-  const copy = prev.map((x) => ({
-    ...x,
-    p1: { ...x.p1 },
-    p2: { ...x.p2 },
-  }))
-  const line = copy[idx]
+      const copy = prev.map((x) => ({
+        ...x,
+        p1: { ...x.p1 },
+        p2: { ...x.p2 },
+      }))
+      const line = copy[idx]
 
-  if (drag.which === "p1") line.p1 = updatePoint(line.p1, m)
-  else line.p2 = updatePoint(line.p2, m)
+      if (drag.which === "p1") line.p1 = updatePoint(line.p1, m)
+      else line.p2 = updatePoint(line.p2, m)
 
-  const nextLenPx = dist(line.p1, line.p2)
-  if (nextLenPx <= 2) {
-    setHint("Garis terlalu pendek. Geser kembali endpoint.")
-    return prev
-  }
+      const nextLenPx = dist(line.p1, line.p2)
+      if (nextLenPx <= 2) {
+        return prev
+      }
 
-  if (pixelPerMeter) {
-    const meter = dist(line.p1, line.p2) / pixelPerMeter
-    const deg = angleDeg(line.p1, line.p2)
-    setCurrentMeters(meter)
-    setCurrentDeg(deg)
-  }
 
-  return copy
-})
+
+      return copy
+    })
   }
 
   function onMouseUp() {
@@ -919,16 +816,12 @@ setMeasurements((prev) => {
     const hitM = measurements.find((o) => near(m, o.p1) || near(m, o.p2))
     if (hitM) {
       setMeasurements((prev) => prev.filter((x) => x.id !== hitM.id))
-      setCurrentMeters(null)
-      setCurrentDeg(null)
-      setHint("Garis ukur dihapus.")
       return
     }
 
     if (referenceLine && (near(m, referenceLine.p1) || near(m, referenceLine.p2))) {
       setReferenceLine(null)
       setPixelPerMeter(null)
-      setHint("Referensi dihapus. Kalibrasi ulang.")
       return
     }
   }
@@ -946,12 +839,8 @@ setMeasurements((prev) => {
     setReferenceLine(null)
     setMeasurements([])
     setTempPoints([])
-    setCurrentMeters(null)
-    setCurrentDeg(null)
     setDrag(null)
     setMode("kalibrasi")
-    setHint("Reset OK. Mode Kalibrasi: klik 2 titik objek referensi.")
-    resetView()
     setInspectionId(null)
   }
 
@@ -969,23 +858,20 @@ setMeasurements((prev) => {
     if (isSubmitting) return
     if (!isFormValid) {
       setFormError(true)
-      setHint("Lengkapi Inspection Data dulu (Inspector, Front, Shift, Shift Time).")
       return
     }
     if (!pixelPerMeter || measurements.length === 0) return
 
     if (!imgSrc || !imgRef.current) {
-  setSubmitStatus("error")
-  setSubmitMsg("Foto inspeksi belum tersedia. Upload foto dulu sebelum submit.")
-  setHint("Submit gagal ❌ Foto inspeksi belum tersedia.")
-  return
-}
+      setSubmitStatus("error")
+      setSubmitMsg("Foto inspeksi belum tersedia. Upload foto dulu sebelum submit.")
+      return
+    }
 
-  try {
-  setIsSubmitting(true)
-  setSubmitStatus("loading")
-  setSubmitMsg("Menyimpan inspeksi & mengunggah foto overlay...")
-setHint("Submitting... (create inspection + save lines + upload measure)")
+    try {
+      setIsSubmitting(true)
+      setSubmitStatus("loading")
+      setSubmitMsg("Menyimpan inspeksi & mengunggah foto overlay...")
 
       let id = inspectionId
       if (!id) {
@@ -993,93 +879,68 @@ setHint("Submitting... (create inspection + save lines + upload measure)")
         setInspectionId(id)
       }
 
-const savedLinesResult = await saveInspectionLines(id)
+      const savedLinesResult = await saveInspectionLines(id)
 
-if (!savedLinesResult?.data?.length) {
-  throw new Error("Detail titik gagal tersimpan")
-}
+      if (!savedLinesResult?.data?.length) {
+        throw new Error("Detail titik gagal tersimpan")
+      }
 
-await uploadMeasure(id)
+      await uploadMeasure(id)
 
-setSubmitStatus("success")
-setSubmitMsg("Inspeksi berhasil tersimpan lengkap.")
-setTimeout(() => setSubmitStatus("idle"), 2000)
+      setSubmitStatus("success")
+      setSubmitMsg("Inspeksi berhasil tersimpan lengkap.")
+      setTimeout(() => setSubmitStatus("idle"), 2000)
+    } catch (e: any) {
+      const msg =
+        e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi."
 
-      const stats = computeStats()
-      setHint(
-        `Submit OK ✅  (Max: ${stats?.maxHeightM.toFixed(2)} m, Lines: ${stats?.linesCount}, OK: ${stats?.linesOkCount})`
-      )
-} catch (e: any) {
-  const msg =
-    e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi."
-
-  setSubmitStatus("error")
-  setSubmitMsg(msg)
-  setHint(`Submit gagal ❌ ${msg}`)
-} finally {
-  setIsSubmitting(false)
-}
+      setSubmitStatus("error")
+      setSubmitMsg(msg)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
     <AppLayout>
-        {submitStatus !== "idle" && (
-  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-    {/* dark glass */}
-    <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" />
+      {submitStatus !== "idle" && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          {/* dark glass */}
+          <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" />
 
-    {/* card */}
-    <div className="relative mx-4 w-[min(92vw,420px)] rounded-2xl border border-buma-border bg-white p-6 shadow-2xl">
-      {submitStatus === "loading" ? (
-        <BumaLoader />
-      ) : submitStatus === "success" ? (
-        <SubmitResultCard
-          variant="success"
-          title="Tersimpan"
-          desc={submitMsg || "Data inspeksi berhasil disimpan."}
-          onClose={() => setSubmitStatus("idle")}
-        />
-      ) : (
-        <SubmitResultCard
-          variant="error"
-          title="Gagal"
-          desc={submitMsg || "Terjadi kendala. Silakan coba lagi."}
-          onClose={() => setSubmitStatus("idle")}
-onRetry={() => {
-  setSubmitStatus("idle")
-  setSubmitMsg("")
-  handleSubmit()
-}}
-        />
+          {/* card */}
+          <div className="relative mx-4 w-[min(92vw,420px)] rounded-2xl border border-buma-border bg-white p-6 shadow-2xl">
+            {submitStatus === "loading" ? (
+              <BumaLoader />
+            ) : submitStatus === "success" ? (
+              <SubmitResultCard
+                variant="success"
+                title="Tersimpan"
+                desc={submitMsg || "Data inspeksi berhasil disimpan."}
+                onClose={() => setSubmitStatus("idle")}
+              />
+            ) : (
+              <SubmitResultCard
+                variant="error"
+                title="Gagal"
+                desc={submitMsg || "Terjadi kendala. Silakan coba lagi."}
+                onClose={() => setSubmitStatus("idle")}
+                onRetry={() => {
+                  setSubmitStatus("idle")
+                  setSubmitMsg("")
+                  handleSubmit()
+                }}
+              />
+            )}
+          </div>
+        </div>
       )}
-    </div>
-  </div>
-)}
-      {/* Page header */}
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="text-2xl font-extrabold tracking-tight text-buma-text">
-            Workspace Pengukuran
-          </div>
-          <div className="mt-1 text-sm text-buma-muted">
-            Upload foto → Kalibrasi referensi → Ukur jenjang → Export report
-          </div>
-        </div>
 
-        <div className="flex items-start justify-end">
-          <div className="relative max-w-[420px] rounded-xl border border-buma-border bg-white px-3 py-2 shadow-soft overflow-hidden">
-            <div className="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-buma-green via-buma-blue to-buma-orange" />
-            <div className="pl-3">
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-buma-muted">
-                Status
-              </div>
-              <div className="mt-1 text-xs font-semibold text-buma-text leading-snug">
-                {hint}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+<div className="mb-2">
+  <div className="text-2xl font-extrabold tracking-tight text-buma-text">
+    Workspace Pengukuran
+  </div>
+</div>
 
       {/* Main layout */}
       <div className="grid gap-4 lg:grid-cols-[390px_1fr]">
@@ -1088,11 +949,11 @@ onRetry={() => {
           <div className="absolute inset-x-0 top-0 h-[4px] bg-gradient-to-r from-buma-green via-buma-blue to-buma-orange" />
 
           <div className="p-4">
-            <SectionTitle no="01" title="Inspection Data" />
+            <SectionTitle no="01" title="Data Inspeksi" />
             <div className="grid gap-3">
               <div className="grid gap-1">
                 <label className="text-[11px] font-semibold text-buma-muted">
-                  Inspector Name <span className="text-buma-orange">*</span>
+                  Nama Inspektor <span className="text-buma-orange">*</span>
                 </label>
                 <input
                   value={inspectorName}
@@ -1110,7 +971,7 @@ onRetry={() => {
 
               <div className="grid gap-1">
                 <label className="text-[11px] font-semibold text-buma-muted">
-                  Area / Front ID <span className="text-buma-orange">*</span>
+                  Area / Front <span className="text-buma-orange">*</span>
                 </label>
                 <input
                   value={areaId}
@@ -1118,7 +979,7 @@ onRetry={() => {
                     setAreaId(e.target.value)
                     setFormError(false)
                   }}
-                  placeholder="Contoh: Front 12-B Highwall"
+                  placeholder="Contoh: 3604"
                   className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition ${formError && !areaId
                     ? "border-red-500"
                     : "border-buma-border focus:border-buma-green/60"
@@ -1143,7 +1004,7 @@ onRetry={() => {
                     : "border-buma-border focus:border-buma-green/60"
                     }`}
                 >
-                  <option value="">Pilih shift</option>
+                  <option value="">— Pilih shift —</option>
                   <option value="DAY">Pagi (DAY)</option>
                   <option value="NIGHT">Malam (NIGHT)</option>
                 </select>
@@ -1152,7 +1013,7 @@ onRetry={() => {
               {/* pelaksanaan = START/MID/END */}
               <div className="grid gap-1">
                 <label className="text-[11px] font-semibold text-buma-muted">
-                  Shift Time <span className="text-buma-orange">*</span>
+                  Rentang Shift <span className="text-buma-orange">*</span>
                 </label>
 
                 <select
@@ -1166,7 +1027,7 @@ onRetry={() => {
                     : "border-buma-border focus:border-buma-green/60"
                     }`}
                 >
-                  <option value="">Pilih waktu inspeksi</option>
+                  <option value="">— Pilih rentang shift —</option>
                   <option value="START">Awal Shift</option>
                   <option value="MID">Tengah Shift</option>
                   <option value="END">Akhir Shift</option>
@@ -1207,12 +1068,12 @@ onRetry={() => {
                     <path d="M3 13v-3H1v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3h-2v3z" />
                   </g>
                 </svg>
-                Import Photo (Source)
+                Import Photo
               </button>
 
               {formError && !isFormValid && (
                 <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
-                  ⚠ Inspector, Area/Front, Shift (DAY/NIGHT), dan Shift Time wajib diisi sebelum mengimpor foto.
+                  ⚠ Inspektor, Area/Front, dan Shift wajib diisi sebelum mengimpor foto.
                 </div>
               )}
             </div>
@@ -1221,14 +1082,14 @@ onRetry={() => {
           <div className="border-t border-buma-border p-4">
             <SectionTitle
               no="02"
-              title="Scale Calibration"
+              title="Kalibrasi Skala"
               desc="Pilih unit referensi, lalu klik 2 titik pada objek acuan."
             />
 
             <div className="grid gap-3">
               <div>
                 <label className="text-[11px] font-semibold text-buma-muted">
-                  Reference Unit <span className="text-buma-orange">*</span>
+                  Unit Referensi <span className="text-buma-orange">*</span>
                 </label>
 
                 <div className="mt-1 grid grid-cols-1 gap-2">
@@ -1244,24 +1105,18 @@ onRetry={() => {
                       setPixelPerMeter(null)
                       setReferenceLine(null)
                       setTempPoints([])
-                      setMode("kalibrasi")
-                      setHint(
-                        v
-                          ? "Unit dipilih. Klik 'Set Points' lalu klik 2 titik pada objek referensi."
-                          : "Pilih unit referensi dulu."
-                      )
                     }}
                     className={`w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none transition ${!refSelected && calError
                       ? "border-red-500"
                       : "border-buma-border focus:border-buma-green/60"
                       }`}
                   >
-                  <option value="">— Pilih unit referensi —</option>
-{(Object.keys(REF_PRESET_M) as RefKey[]).map((k) => (
-  <option key={k} value={k}>
-    {k} ({REF_PRESET_M[k].toFixed(2)} m)
-  </option>
-))}
+                    <option value="">— Pilih unit referensi —</option>
+                    {(Object.keys(REF_PRESET_M) as RefKey[]).map((k) => (
+                      <option key={k} value={k}>
+                        {k} ({REF_PRESET_M[k].toFixed(2)} m)
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1280,11 +1135,10 @@ onRetry={() => {
                   setCalError(false)
                   setMode("kalibrasi")
                   setTempPoints([])
-                  setHint("Mode Kalibrasi: klik 2 titik pada objek referensi.")
                 }}
                 title={!refSelected ? "Pilih unit referensi dulu" : "Set 2 titik referensi"}
               >
-                Set Points
+                Set Point
               </button>
 
               {calError && !refSelected && (
@@ -1292,33 +1146,20 @@ onRetry={() => {
                   ⚠ Pilih unit referensi sebelum melakukan kalibrasi.
                 </div>
               )}
-
-              <div className="grid grid-cols-2 gap-2">
-                <StatPill
-                  label="Px/m"
-                  value={pixelPerMeter ? pixelPerMeter.toFixed(2) : "—"}
-                  tone="info"
-                />
-                <StatPill
-                  label="Ref"
-                  value={refSelected ? (refKey as string) : "UNSET"}
-                  tone={refSelected ? "ok" : "warn"}
-                />
-              </div>
             </div>
           </div>
 
           <div className="border-t border-buma-border p-4">
             <SectionTitle
               no="03"
-              title="Dimensional Analysis"
+              title="Pengukuran"
               desc="Pilih orientasi, lalu mulai ukur."
             />
 
             <div className="grid gap-3">
               <div>
                 <label className="text-[11px] font-semibold text-buma-muted">
-                  Orientation Vector <span className="text-buma-orange">*</span>
+                  Orientasi Garis <span className="text-buma-orange">*</span>
                 </label>
 
                 <select
@@ -1329,9 +1170,9 @@ onRetry={() => {
                   }}
                   className="mt-1 w-full rounded-xl border border-buma-border bg-white px-3 py-2 text-sm outline-none transition focus:border-buma-green/60"
                 >
-                  <option value="vertical">Vertical</option>
+                  <option value="vertical">Vertikal</option>
                   <option value="horizontal">Horizontal</option>
-                  <option value="free">Free</option>
+                  <option value="free">Bebas</option>
                 </select>
               </div>
 
@@ -1345,18 +1186,12 @@ onRetry={() => {
                   onClick={() => {
                     if (!refSelected || !pixelPerMeter) {
                       setMeasureError(true)
-                      setHint(
-                        !refSelected
-                          ? "Pilih unit referensi dulu, lalu klik Set Points."
-                          : "Kalibrasi dulu: klik Set Points lalu pilih 2 titik pada objek referensi."
-                      )
                       return
                     }
 
                     setMeasureError(false)
                     setMode("ukur")
                     setTempPoints([])
-                    setHint("Mode Ukur: klik 2 titik untuk ukur jenjang.")
                   }}
                   title={
                     !refSelected
@@ -1366,7 +1201,7 @@ onRetry={() => {
                         : "Mulai ukur"
                   }
                 >
-                  Start Measure
+                  Mulai ukur
                 </button>
 
                 <button
@@ -1374,45 +1209,19 @@ onRetry={() => {
                   type="button"
                   onClick={resetAll}
                 >
-                  Reset All
+                  Reset
                 </button>
               </div>
 
               {measureError && (!refSelected || !pixelPerMeter) && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
                   {!refSelected ? (
-                    <>⚠ Lakukan tahap <b>Scale Calibration</b> terlebih dahulu sebelum pengukuran.</>
+                    <>⚠ Lakukan tahap <b>kalibrasi skala</b> terlebih dahulu sebelum pengukuran.</>
                   ) : (
                     <>⚠ Lakukan <b>kalibrasi</b> dulu (klik <b>Set Points</b> lalu pilih 2 titik referensi).</>
                   )}
                 </div>
               )}
-
-              <div className="grid grid-cols-2 gap-2">
-                <StatPill label="Orientation" value={orientation.toUpperCase()} tone="info" />
-                <StatPill
-                  label="Lines"
-                  value={String(measurements.length)}
-                  tone={measurements.length > 0 ? "ok" : "warn"}
-                />
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <StatPill
-                  label="Last (m)"
-                  value={currentMeters != null ? currentMeters.toFixed(2) : "—"}
-                  tone={currentMeters != null ? "ok" : "info"}
-                />
-                <StatPill
-                  label="Angle (°)"
-                  value={currentDeg != null ? `${currentDeg.toFixed(1)}°` : "—"}
-                  tone={currentDeg != null ? "ok" : "info"}
-                />
-                <StatPill
-                  label="Limit"
-                  value={`${maxBench.toFixed(2)} m`}
-                  tone="info"
-                />
-              </div>
             </div>
           </div>
         </aside>
@@ -1441,7 +1250,6 @@ onRetry={() => {
                         onClick={() => {
                           setMode("kalibrasi")
                           setTempPoints([])
-                          setHint("Mode Kalibrasi: klik 2 titik objek referensi.")
                         }}
                         className={`relative z-10 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-extrabold transition ${mode === "kalibrasi"
                           ? "bg-gradient-to-r from-[#2D5EFC] to-buma-blue text-white"
@@ -1463,7 +1271,6 @@ onRetry={() => {
                         onClick={() => {
                           setMode("ukur")
                           setTempPoints([])
-                          setHint("Mode Ukur: klik 2 titik untuk ukur jenjang.")
                         }}
                         className={`relative z-10 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-extrabold transition ${mode === "ukur"
                           ? "bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
@@ -1505,11 +1312,9 @@ onRetry={() => {
                       <canvas
                         ref={canvasRef}
                         className="absolute inset-0 cursor-crosshair"
-                        style={{
-                          transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
-                          transformOrigin: "0 0",
-                          willChange: "transform",
-                        }}
+                   style={{
+  willChange: "auto",
+}}
                         onMouseDown={onMouseDown}
                         onMouseMove={onMouseMove}
                         onMouseUp={onMouseUp}
@@ -1536,7 +1341,7 @@ onRetry={() => {
 
                           <div className="text-sm font-extrabold text-buma-text">Belum ada foto</div>
                           <div className="mt-1 text-sm text-buma-muted">
-                            Klik <b>Import Photo</b> di panel kiri.
+                            Klik <b>Import Photo</b> pada panel.
                           </div>
                         </div>
                       </div>
@@ -1576,40 +1381,53 @@ onRetry={() => {
               </div>
             </div>
 
-            {/* Right toolbar */}
-            <div className={`absolute right-3 top-28 flex flex-col gap-2 ${submitStatus === "loading" ? "pointer-events-none opacity-40" : ""}`}>
-              <IconButton label="Zoom In" icon="＋" onClick={() => zoomBy(1.15)} />
-              <IconButton label="Zoom Out" icon="－" onClick={() => zoomBy(1 / 1.15)} />
-              <IconButton label="Reset View" icon="⟲" onClick={resetView} />
-              <IconButton label="Capture" icon="📷" onClick={exportImage} />
-            </div>
-
             {/* Bottom bar */}
             <div className="sticky bottom-0 w-full border-t border-buma-border bg-white/95 backdrop-blur">
               <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
+                                <button
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#15803D]/20 bg-buma-blue/5 px-4 py-2.5 text-sm font-extrabold text-buma-blue shadow-soft transition-all duration-150 hover:bg-buma-blue/15 hover:border-buma-blue/40 active:scale-95 disabled:opacity-40"
+                  type="button"
+                  disabled={!imgSrc}
+                  onClick={exportImage}
+                  title={!imgSrc ? "Upload foto dulu" : "Save as PNG"}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 15 15"
+                    className="shrink-0"
+                  >
+                    <path
+                      fill="currentColor"
+                      d="M2.5 6.5V6H2v.5zm4 0V6H6v.5zm0 4H6v.5h.5zm7-7h.5v-.207l-.146-.147zm-3-3l.354-.354L10.707 0H10.5zM2.5 7h1V6h-1zm.5 4V8.5H2V11zm0-2.5v-2H2v2zm.5-.5h-1v1h1zm.5-.5a.5.5 0 0 1-.5.5v1A1.5 1.5 0 0 0 5 7.5zM3.5 7a.5.5 0 0 1 .5.5h1A1.5 1.5 0 0 0 3.5 6zM6 6.5v4h1v-4zm.5 4.5h1v-1h-1zM9 9.5v-2H8v2zM7.5 6h-1v1h1zM9 7.5A1.5 1.5 0 0 0 7.5 6v1a.5.5 0 0 1 .5.5zM7.5 11A1.5 1.5 0 0 0 9 9.5H8a.5.5 0 0 1-.5.5zM10 6v5h1V6zm.5 1H13V6h-2.5zm0 2H12V8h-1.5zM2 5V1.5H1V5zm11-1.5V5h1V3.5zM2.5 1h8V0h-8zm7.646-.146l3 3l.708-.708l-3-3zM2 1.5a.5.5 0 0 1 .5-.5V0A1.5 1.5 0 0 0 1 1.5zM1 12v1.5h1V12zm1.5 3h10v-1h-10zM14 13.5V12h-1v1.5zM12.5 15a1.5 1.5 0 0 0 1.5-1.5h-1a.5.5 0 0 1-.5.5zM1 13.5A1.5 1.5 0 0 0 2.5 15v-1a.5.5 0 0 1-.5-.5z"
+                    />
+                  </svg>
+                  Simpan PNG
+                </button>
                 <button
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-50"
                   type="button"
-                disabled={
-  submitStatus === "loading" ||
-  !imgSrc ||
-  !refSelected ||
-  !pixelPerMeter ||
-  measurements.length === 0
-}
-title={
-  isSubmitting
-    ? "Submitting..."
-    : !imgSrc
-      ? "Upload foto dulu"
-      : !refSelected
-        ? "Pilih unit referensi dulu"
-        : !pixelPerMeter
-          ? "Kalibrasi dulu"
-          : measurements.length === 0
-            ? "Belum ada garis ukur"
-            : "Submit"
-}
+                  disabled={
+                    submitStatus === "loading" ||
+                    !imgSrc ||
+                    !refSelected ||
+                    !pixelPerMeter ||
+                    measurements.length === 0
+                  }
+                  title={
+                    isSubmitting
+                      ? "Submitting..."
+                      : !imgSrc
+                        ? "Upload foto dulu"
+                        : !refSelected
+                          ? "Pilih unit referensi dulu"
+                          : !pixelPerMeter
+                            ? "Kalibrasi dulu"
+                            : measurements.length === 0
+                              ? "Belum ada garis ukur"
+                              : "Submit"
+                  }
                   onClick={handleSubmit}
                 >
                   <svg
@@ -1629,28 +1447,6 @@ title={
                     />
                   </svg>
                   {isSubmitting ? "Submitting..." : "Submit"}
-                </button>
-
-                <button
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#15803D]/20 bg-buma-blue/5 px-4 py-2.5 text-sm font-extrabold text-buma-blue shadow-soft transition-all duration-150 hover:bg-buma-blue/15 hover:border-buma-blue/40 active:scale-95 disabled:opacity-40"
-                  type="button"
-                  disabled={!imgSrc}
-                  onClick={exportImage}
-                  title={!imgSrc ? "Upload foto dulu" : "Save as PNG"}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="15"
-                    height="15"
-                    viewBox="0 0 15 15"
-                    className="shrink-0"
-                  >
-                    <path
-                      fill="currentColor"
-                      d="M2.5 6.5V6H2v.5zm4 0V6H6v.5zm0 4H6v.5h.5zm7-7h.5v-.207l-.146-.147zm-3-3l.354-.354L10.707 0H10.5zM2.5 7h1V6h-1zm.5 4V8.5H2V11zm0-2.5v-2H2v2zm.5-.5h-1v1h1zm.5-.5a.5.5 0 0 1-.5.5v1A1.5 1.5 0 0 0 5 7.5zM3.5 7a.5.5 0 0 1 .5.5h1A1.5 1.5 0 0 0 3.5 6zM6 6.5v4h1v-4zm.5 4.5h1v-1h-1zM9 9.5v-2H8v2zM7.5 6h-1v1h1zM9 7.5A1.5 1.5 0 0 0 7.5 6v1a.5.5 0 0 1 .5.5zM7.5 11A1.5 1.5 0 0 0 9 9.5H8a.5.5 0 0 1-.5.5zM10 6v5h1V6zm.5 1H13V6h-2.5zm0 2H12V8h-1.5zM2 5V1.5H1V5zm11-1.5V5h1V3.5zM2.5 1h8V0h-8zm7.646-.146l3 3l.708-.708l-3-3zM2 1.5a.5.5 0 0 1 .5-.5V0A1.5 1.5 0 0 0 1 1.5zM1 12v1.5h1V12zm1.5 3h10v-1h-10zM14 13.5V12h-1v1.5zM12.5 15a1.5 1.5 0 0 0 1.5-1.5h-1a.5.5 0 0 1-.5.5zM1 13.5A1.5 1.5 0 0 0 2.5 15v-1a.5.5 0 0 1-.5-.5z"
-                    />
-                  </svg>
-                  Save as PNG
                 </button>
               </div>
             </div>
