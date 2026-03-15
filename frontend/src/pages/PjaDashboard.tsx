@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import AppLayout from "../layouts/AppLayout"
 import BumaLoader from "../components/BumaLoader"
 import BumaCheck from "../components/BumaCheck"
@@ -7,6 +7,7 @@ import { getLimitM } from "../config/reference"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 const LS_KEY = "mt_session_v1"
+const AUTO_REFRESH_MS = 10000
 
 type Shift = "DAY" | "NIGHT"
 type Pelaksanaan = "START" | "MID" | "END"
@@ -81,6 +82,14 @@ function fmtDateTime(iso: string) {
   const date = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
   return { date, time }
+}
+
+function fmtLastRefresh(iso: string | null) {
+  if (!iso) return "-"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "-"
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 function pillReview(review: ReviewStatus) {
@@ -221,6 +230,9 @@ export default function PjaDashboard() {
   const [rows, setRows] = useState<InspectionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const [q, setQ] = useState("")
   const [tab, setTab] = useState<"ALL" | ReviewStatus>("PENDING")
@@ -254,10 +266,22 @@ export default function PjaDashboard() {
 
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // ===== fetch inspections =====
-  async function fetchInspections() {
-    setLoading(true)
+  const fetchingRef = useRef(false)
+
+  async function fetchInspections(options?: { silent?: boolean }) {
+    const silent = options?.silent === true
+
+    if (fetchingRef.current) return
+    fetchingRef.current = true
+
+    if (silent) {
+      setIsRefreshing(true)
+    } else {
+      setLoading(true)
+    }
+
     setLoadErr(null)
+
     try {
       const r = await fetch(`${API_BASE}/api/inspections`, { method: "GET" })
       if (!r.ok) throw new Error(await r.text())
@@ -269,16 +293,20 @@ export default function PjaDashboard() {
         inspectedAt: String(x.inspected_at ?? x.inspectedAt ?? ""),
         inspector: String(x.inspector ?? ""),
         shift: (x.shift === "DAY" || x.shift === "NIGHT" ? x.shift : "DAY") as Shift,
-        pelaksanaan: (x.pelaksanaan === "START" || x.pelaksanaan === "MID" || x.pelaksanaan === "END"
-          ? x.pelaksanaan
-          : "START") as Pelaksanaan,
+        pelaksanaan: (
+          x.pelaksanaan === "START" || x.pelaksanaan === "MID" || x.pelaksanaan === "END"
+            ? x.pelaksanaan
+            : "START"
+        ) as Pelaksanaan,
         front: String(x.front ?? ""),
         linesCount: Number(x.lines_count ?? 0),
         linesOkCount: Number(x.lines_ok_count ?? 0),
         maxHeightM: Number(x.max_height_m ?? 0),
-        reviewStatus: (x.review_status === "VALID" || x.review_status === "REJECT" || x.review_status === "PENDING"
-          ? x.review_status
-          : "PENDING") as ReviewStatus,
+        reviewStatus: (
+          x.review_status === "VALID" || x.review_status === "REJECT" || x.review_status === "PENDING"
+            ? x.review_status
+            : "PENDING"
+        ) as ReviewStatus,
         reviewedBy: x.reviewed_by ? String(x.reviewed_by) : null,
         reviewNotes: x.review_notes ?? null,
         ref_unit: x.ref_unit ?? null,
@@ -286,17 +314,33 @@ export default function PjaDashboard() {
       }))
 
       setRows(mapped)
+      setLastRefreshAt(new Date().toISOString())
     } catch (e: any) {
       setLoadErr(e?.message ?? "Failed to load")
     } finally {
+      fetchingRef.current = false
       setLoading(false)
+      setIsRefreshing(false)
     }
   }
 
   useEffect(() => {
-    fetchInspections()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void fetchInspections()
   }, [])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    if (open) return
+    if (isSubmitting) return
+    if (isDeleting) return
+    if (submitStatus === "loading") return
+
+    const timer = window.setInterval(() => {
+      void fetchInspections({ silent: true })
+    }, AUTO_REFRESH_MS)
+
+    return () => window.clearInterval(timer)
+  }, [autoRefresh, open, isSubmitting, isDeleting, submitStatus])
 
   const counts = useMemo(() => {
     const c = { ALL: rows.length, PENDING: 0, VALID: 0, REJECT: 0 }
@@ -430,127 +474,123 @@ export default function PjaDashboard() {
     return lines.every((ln) => lineVerify[ln.label] !== null && lineVerify[ln.label] !== undefined)
   }, [lines, lineVerify])
 
-  // standar = limit berdasarkan unit (sementara return 8 untuk semua)
-const standardM = useMemo(() => {
-  return getLimitM(measureMeta?.ref_unit ?? active?.ref_unit ?? null)
-}, [measureMeta?.ref_unit, active?.ref_unit])
+  const standardM = useMemo(() => {
+    return getLimitM(measureMeta?.ref_unit ?? active?.ref_unit ?? null)
+  }, [measureMeta?.ref_unit, active?.ref_unit])
 
-async function send() {
-  if (!active) return
-  if (!allVerified) return
-  if (isSubmitting) return
+  async function send() {
+    if (!active) return
+    if (!allVerified) return
+    if (isSubmitting) return
 
-  try {
-    setIsSubmitting(true)
-    setSubmitStatus("loading")
-    setSubmitMsg("Mengirim verifikasi & menyimpan hasil...")
+    try {
+      setIsSubmitting(true)
+      setSubmitStatus("loading")
+      setSubmitMsg("Mengirim verifikasi & menyimpan hasil...")
 
-    const missingHeight = lines.filter((ln) => ln.heightM == null)
-    if (missingHeight.length) {
-      throw new Error(
-        `Tinggi titik belum tersedia untuk: ${missingHeight.map((x) => x.label).join(", ")}`
-      )
+      const missingHeight = lines.filter((ln) => ln.heightM == null)
+      if (missingHeight.length) {
+        throw new Error(
+          `Tinggi titik belum tersedia untuk: ${missingHeight.map((x) => x.label).join(", ")}`
+        )
+      }
+
+      const payloadLines = lines.map((ln) => ({
+        label: ln.label,
+        height_m: ln.heightM as number,
+        ok: lineVerify[ln.label] ?? null,
+      }))
+
+      const rLines = await fetch(`${API_BASE}/api/inspection-lines`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inspection_id: active.id,
+          lines: payloadLines,
+        }),
+      })
+
+      const linesResult = await rLines.json().catch(() => null)
+      if (!rLines.ok) {
+        throw new Error(linesResult?.error || "Gagal menyimpan detail titik inspeksi")
+      }
+
+      const okCount = Object.values(lineVerify).filter((v) => v === true).length
+
+      const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          review_status: "VALID",
+          reviewed_by: pjaName,
+          review_notes: notes || null,
+          lines_ok_count: okCount,
+        }),
+      })
+
+      const result = await r.json().catch(() => null)
+      if (!r.ok) {
+        throw new Error(result?.error || "Gagal update status inspeksi")
+      }
+
+      setSubmitStatus("success")
+      setSubmitMsg("Verifikasi berhasil dikirim.")
+
+      await fetchInspections({ silent: true })
+
+      setTimeout(() => {
+        setSubmitStatus("idle")
+        closeDetail()
+      }, 2000)
+    } catch (e: any) {
+      setSubmitStatus("error")
+      setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi.")
+    } finally {
+      setIsSubmitting(false)
     }
-
-    // 1) SIMPAN PER-TITIK
-    const payloadLines = lines.map((ln) => ({
-      label: ln.label,
-      height_m: ln.heightM as number,
-      ok: lineVerify[ln.label] ?? null,
-    }))
-
-    const rLines = await fetch(`${API_BASE}/api/inspection-lines`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inspection_id: active.id,
-        lines: payloadLines,
-      }),
-    })
-
-    const linesResult = await rLines.json().catch(() => null)
-    if (!rLines.ok) {
-      throw new Error(linesResult?.error || "Gagal menyimpan detail titik inspeksi")
-    }
-
-    // 2) UPDATE SUMMARY INSPECTIONS
-    const okCount = Object.values(lineVerify).filter((v) => v === true).length
-
-    const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        review_status: "VALID",
-        reviewed_by: pjaName,
-        review_notes: notes || null,
-        lines_ok_count: okCount,
-      }),
-    })
-
-    const result = await r.json().catch(() => null)
-    if (!r.ok) {
-      throw new Error(result?.error || "Gagal update status inspeksi")
-    }
-
-    setSubmitStatus("success")
-    setSubmitMsg("Verifikasi berhasil dikirim.")
-
-    await fetchInspections()
-
-    setTimeout(() => {
-      setSubmitStatus("idle")
-      closeDetail()
-    }, 2000)
-  } catch (e: any) {
-    setSubmitStatus("error")
-    setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi.")
-  } finally {
-    setIsSubmitting(false)
   }
-}
 
-async function deleteInspection() {
-  if (!active) return
-  if (isDeleting) return
+  async function deleteInspection() {
+    if (!active) return
+    if (isDeleting) return
 
-  const ok = window.confirm(
-    `Hapus inspeksi ini?\n\nID: ${active.id}\nInspector: ${active.inspector}\nFront: ${active.front}\n\nData yang terhapus tidak bisa dikembalikan.`
-  )
-  if (!ok) return
+    const ok = window.confirm(
+      `Hapus inspeksi ini?\n\nID: ${active.id}\nInspector: ${active.inspector}\nFront: ${active.front}\n\nData yang terhapus tidak bisa dikembalikan.`
+    )
+    if (!ok) return
 
-  try {
-    setIsDeleting(true)
-    setSubmitStatus("loading")
-    setSubmitMsg("Menghapus data inspeksi...")
+    try {
+      setIsDeleting(true)
+      setSubmitStatus("loading")
+      setSubmitMsg("Menghapus data inspeksi...")
 
-    const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
-      method: "DELETE",
-    })
+      const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
+        method: "DELETE",
+      })
 
-    const result = await r.json().catch(() => null)
-    if (!r.ok) {
-      throw new Error(result?.error || "Gagal menghapus inspeksi")
+      const result = await r.json().catch(() => null)
+      if (!r.ok) {
+        throw new Error(result?.error || "Gagal menghapus inspeksi")
+      }
+
+      setSubmitStatus("success")
+      setSubmitMsg("Data inspeksi berhasil dihapus.")
+
+      await fetchInspections({ silent: true })
+
+      setTimeout(() => {
+        setSubmitStatus("idle")
+        closeDetail()
+      }, 1200)
+    } catch (e: any) {
+      setSubmitStatus("error")
+      setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala saat menghapus data.")
+    } finally {
+      setIsDeleting(false)
     }
-
-    setSubmitStatus("success")
-    setSubmitMsg("Data inspeksi berhasil dihapus.")
-
-    await fetchInspections()
-
-    setTimeout(() => {
-      setSubmitStatus("idle")
-      closeDetail()
-    }, 1200)
-  } catch (e: any) {
-    setSubmitStatus("error")
-    setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala saat menghapus data.")
-  } finally {
-    setIsDeleting(false)
   }
-}
 
   return (
-
     <AppLayout>
       {submitStatus !== "idle" && (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center">
@@ -582,6 +622,7 @@ async function deleteInspection() {
           </div>
         </div>
       )}
+
       <div className="space-y-4">
         {/* ===== HERO ===== */}
         <div className="relative overflow-hidden rounded-3xl border border-buma-border bg-white shadow-soft">
@@ -650,15 +691,59 @@ async function deleteInspection() {
                 ))}
               </div>
 
-              <button
-                type="button"
-                onClick={fetchInspections}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-buma-border bg-white px-3 py-2 text-xs font-extrabold text-buma-text transition hover:bg-black/5"
-                title="Refresh"
-              >
-                <span className="text-sm leading-none">↻</span>
-                Refresh
-              </button>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <span className="rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-[11px] font-extrabold text-buma-muted">
+                  Last update: {fmtLastRefresh(lastRefreshAt)}
+                </span>
+
+<label
+  className="inline-flex items-center gap-2 rounded-xl border border-buma-border bg-white px-3 py-1.5 cursor-pointer select-none transition hover:bg-black/5"
+  title="Toggle auto refresh data"
+>
+  <span className="flex flex-col leading-none">
+    <span className="text-[10px] font-bold uppercase tracking-wide text-buma-muted">
+      Auto Refresh
+    </span>
+    <span
+      className={cls(
+        "mt-0.5 text-[11px] font-extrabold",
+        autoRefresh ? "text-buma-green" : "text-buma-muted"
+      )}
+    >
+      {autoRefresh ? "Active" : "Off"}
+    </span>
+  </span>
+
+  <span className="relative inline-flex items-center shrink-0">
+    <input
+      type="checkbox"
+      checked={autoRefresh}
+      onChange={() => setAutoRefresh((v) => !v)}
+      className="sr-only peer"
+    />
+    <span
+      className="
+        relative h-6 w-11 rounded-full bg-slate-200 transition
+        peer-checked:bg-emerald-500/20
+        after:absolute after:left-[2px] after:top-[2px]
+        after:h-5 after:w-5 after:rounded-full after:bg-slate-500 after:shadow-sm after:transition
+        peer-checked:after:translate-x-5 peer-checked:after:bg-emerald-600
+      "
+    />
+  </span>
+</label>
+
+                <button
+                  type="button"
+                  onClick={() => void fetchInspections({ silent: true })}
+                  disabled={isRefreshing || loading}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-buma-border bg-white px-3 py-2 text-xs font-extrabold text-buma-text transition hover:bg-black/5 disabled:opacity-60"
+                  title="Refresh"
+                >
+                  <span className={cls("text-sm leading-none", isRefreshing && "animate-spin")}>↻</span>
+                  {isRefreshing ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
             </div>
 
             {loadErr ? (
@@ -861,36 +946,36 @@ async function deleteInspection() {
 
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/35 to-transparent p-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition">
                           <span className="text-xs font-extrabold text-white/90">Klik untuk perbesar</span>
-                         <span
-  className="
-  inline-flex items-center justify-center
-  h-8 w-8
-  rounded-full
-  border border-white/25
-  bg-white/10
-  text-white/90
-  backdrop-blur
-  shadow-sm
-  transition
-  group-hover:scale-105
-"
->
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-  >
-    <path
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      d="m21 21l-4.343-4.343m0 0A8 8 0 1 0 5.343 5.343a8 8 0 0 0 11.314 11.314M11 8v6m-3-3h6"
-    />
-  </svg>
-</span>
+                          <span
+                            className="
+                              inline-flex items-center justify-center
+                              h-8 w-8
+                              rounded-full
+                              border border-white/25
+                              bg-white/10
+                              text-white/90
+                              backdrop-blur
+                              shadow-sm
+                              transition
+                              group-hover:scale-105
+                            "
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                fill="none"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="m21 21l-4.343-4.343m0 0A8 8 0 1 0 5.343 5.343a8 8 0 0 0 11.314 11.314M11 8v6m-3-3h6"
+                              />
+                            </svg>
+                          </span>
                         </div>
                       </div>
                     </button>
@@ -931,7 +1016,6 @@ async function deleteInspection() {
 
                   {/* RIGHT */}
                   <div className="space-y-3">
-                    {/* Card Verifikasi */}
                     <div className="rounded-2xl border border-buma-border bg-white p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -956,7 +1040,6 @@ async function deleteInspection() {
 
                           return (
                             <div key={ln.label} className="rounded-2xl border border-buma-border bg-buma-bg p-3">
-                              {/* Row atas */}
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-center gap-3 min-w-0">
                                   <div className="flex flex-col items-center">
@@ -988,7 +1071,6 @@ async function deleteInspection() {
                                 </span>
                               </div>
 
-                              {/* Buttons */}
                               <div className="mt-3 grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
@@ -1044,7 +1126,6 @@ async function deleteInspection() {
                       </div>
                     </div>
 
-                    {/* Card Catatan */}
                     <div className="rounded-2xl border border-buma-border bg-white p-4">
                       <div className="text-sm font-extrabold text-buma-text">Catatan</div>
                       <div className="mt-1 text-xs text-buma-muted">Opsional.</div>
@@ -1062,43 +1143,42 @@ async function deleteInspection() {
                 </div>
               </div>
 
-              {/* footer */}
               <div className="sticky bottom-0 z-10 border-t border-buma-border bg-white/95 px-4 py-3 md:px-5">
-          <div className="flex flex-wrap items-center justify-end gap-3">
-  <button
-    type="button"
-    onClick={() => void deleteInspection()}
-    disabled={isDeleting || isSubmitting || submitStatus === "loading"}
-    className="rounded-xl border border-red-500/25 bg-red-50 px-4 py-2.5 text-sm font-extrabold text-red-600 hover:bg-red-100 disabled:opacity-40"
-    title={isDeleting ? "Menghapus..." : "Hapus inspeksi ini"}
-  >
-    {isDeleting ? "Menghapus..." : "Hapus"}
-  </button>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void deleteInspection()}
+                    disabled={isDeleting || isSubmitting || submitStatus === "loading"}
+                    className="rounded-xl border border-red-500/25 bg-red-50 px-4 py-2.5 text-sm font-extrabold text-red-600 hover:bg-red-100 disabled:opacity-40"
+                    title={isDeleting ? "Menghapus..." : "Hapus inspeksi ini"}
+                  >
+                    {isDeleting ? "Menghapus..." : "Hapus"}
+                  </button>
 
-  <button
-    type="button"
-    onClick={closeDetail}
-    className="rounded-xl border border-buma-border bg-white px-4 py-2.5 text-sm font-extrabold text-buma-text hover:bg-black/5"
-  >
-    Batal
-  </button>
+                  <button
+                    type="button"
+                    onClick={closeDetail}
+                    className="rounded-xl border border-buma-border bg-white px-4 py-2.5 text-sm font-extrabold text-buma-text hover:bg-black/5"
+                  >
+                    Batal
+                  </button>
 
-  <button
-    type="button"
-    disabled={!allVerified || isSubmitting || isDeleting || submitStatus === "loading"}
-    onClick={() => void send()}
-    className="rounded-xl bg-gradient-to-r from-[#2D5EFC] to-buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-40"
-    title={
-      !allVerified
-        ? "Semua titik harus diverifikasi (Sesuai / Tidak sesuai)"
-        : isSubmitting
-          ? "Mengirim..."
-          : "Kirim verifikasi"
-    }
-  >
-    {isSubmitting ? "Mengirim..." : "Kirim"}
-  </button>
-</div>
+                  <button
+                    type="button"
+                    disabled={!allVerified || isSubmitting || isDeleting || submitStatus === "loading"}
+                    onClick={() => void send()}
+                    className="rounded-xl bg-gradient-to-r from-[#2D5EFC] to-buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-40"
+                    title={
+                      !allVerified
+                        ? "Semua titik harus diverifikasi (Sesuai / Tidak sesuai)"
+                        : isSubmitting
+                          ? "Mengirim..."
+                          : "Kirim verifikasi"
+                    }
+                  >
+                    {isSubmitting ? "Mengirim..." : "Kirim"}
+                  </button>
+                </div>
 
                 {!allVerified ? (
                   <div className="mt-2 text-xs text-buma-muted">
@@ -1109,7 +1189,6 @@ async function deleteInspection() {
             </div>
           </div>
 
-          {/* image viewer */}
           {imgOpen ? (
             <div className="fixed inset-0 z-[10000]">
               <div className="absolute inset-0 bg-black/80" onClick={() => setImgOpen(false)} />
