@@ -205,52 +205,49 @@ function AccountCard({
   const isAdmin = accountRole === "ADMIN"
   const access = operationalAccess ?? "NONE"
 
-  return (
-    <div className="p-3">
-      <div className="rounded-xl border border-buma-border bg-white/70 p-3">
-        <div className="text-[11px] font-semibold uppercase tracking-widest text-buma-muted">
-          Info Akun
-        </div>
+return (
+  <div className="p-3">
+    <div className="rounded-xl border border-buma-border bg-white/70 p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-widest text-buma-muted">
+        Info Akun
+      </div>
 
-        <div className="mt-2 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-extrabold text-buma-text">
-              {username}
-            </div>
-            <div className="mt-1 text-xs text-buma-muted">
-              {roleLabel(activeRole)}
-            </div>
+      <div className="mt-2 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-extrabold text-buma-text">
+            {username}
           </div>
-
-          <div className="shrink-0">
-            <ClusterBadge activeRole={activeRole} accountRole={accountRole} />
+          <div className="mt-1 text-xs text-buma-muted">
+            {roleLabel(activeRole)}
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <AccessBadge
-            operationalAccess={operationalAccess}
-            accountRole={accountRole}
-          />
-          <span className="inline-flex items-center rounded-lg border border-buma-border bg-white px-2.5 py-0.5 text-[11px] font-bold text-buma-muted">
-            {accountLabel(accountRole)}
-          </span>
-        </div>
-
-        <div className="mt-3 text-xs leading-relaxed text-buma-muted">
-          {isAdmin
-            ? "Akun ini memiliki akses penuh ke seluruh workspace dan panel admin."
-            : access === "NONE"
-              ? "Akun ini belum memiliki akses operasional. Hubungi admin untuk pengaturan role."
-              : access === "FIELD"
-                ? "Akun ini hanya dapat mengakses Inspector Lapangan."
-                : "Akun ini dapat mengakses Inspector Lapangan dan Verifikasi PJA."}
+        <div className="shrink-0">
+          <ClusterBadge activeRole={activeRole} accountRole={accountRole} />
         </div>
       </div>
 
-      <BackToSelectButton onClick={onBack} />
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <AccessBadge
+          operationalAccess={operationalAccess}
+          accountRole={accountRole}
+        />
+      </div>
+
+      <div className="mt-3 text-xs leading-relaxed text-buma-muted">
+        {isAdmin
+          ? "Akun ini memiliki akses penuh ke seluruh workspace dan panel admin."
+          : access === "NONE"
+            ? "Akun ini belum memiliki akses operasional. Hubungi admin untuk pengaturan role."
+            : access === "FIELD"
+              ? "Akun ini hanya dapat mengakses Inspector Lapangan."
+              : "Akun ini dapat mengakses Inspector Lapangan dan Verifikasi PJA."}
+      </div>
     </div>
-  )
+
+    <BackToSelectButton onClick={onBack} />
+  </div>
+)
 }
 
 export default function Topbar() {

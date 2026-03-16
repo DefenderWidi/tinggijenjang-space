@@ -29,6 +29,8 @@ type InspectionRow = {
   reviewNotes?: string | null
   ref_unit?: string | null
   ref_meter?: number | null
+  ref_verify_ok?: boolean | null
+  ref_verify_meter?: number | null
 }
 
 type MeasureRow = {
@@ -254,6 +256,9 @@ export default function PjaDashboard() {
   const [measureLoading, setMeasureLoading] = useState(false)
   const [measureErr, setMeasureErr] = useState<string | null>(null)
 
+  const [refVerify, setRefVerify] = useState<boolean | null>(null)
+  const [refHeight, setRefHeight] = useState<string>("")
+
   // lines + per-line verification
   const [lines, setLines] = useState<LineItem[]>([])
   const [lineVerify, setLineVerify] = useState<Record<string, boolean | null>>({})
@@ -311,6 +316,10 @@ export default function PjaDashboard() {
         reviewNotes: x.review_notes ?? null,
         ref_unit: x.ref_unit ?? null,
         ref_meter: x.ref_meter ?? null,
+        ref_verify_ok:
+          x.ref_verify_ok === true ? true : x.ref_verify_ok === false ? false : null,
+        ref_verify_meter:
+          x.ref_verify_meter != null ? Number(x.ref_verify_meter) : null,
       }))
 
       setRows(mapped)
@@ -377,6 +386,8 @@ export default function PjaDashboard() {
 
     setLines([])
     setLineVerify({})
+    setRefVerify(null)
+    setRefHeight("")
   }
 
   async function fetchLatestMeasure(inspectionId: string): Promise<LineItem[] | null> {
@@ -393,27 +404,25 @@ export default function PjaDashboard() {
       const data: MeasureRow[] = Array.isArray(j?.data) ? j.data : j?.data ? [j.data] : []
       const m: any = data[0]
 
-      if (!m?.image_url) {
-        setPhotoUrl(null)
-        setMeasureMeta(null)
-        return null
-      }
+if (!m?.image_url) {
+  setPhotoUrl(null)
+  return null
+}
 
       setPhotoUrl(String(m.image_url))
-      setMeasureMeta({
-        ref_unit: m.ref_unit ?? null,
-        ref_meter: m.ref_meter ?? null,
-        pixel_per_meter: m.pixel_per_meter ?? null,
-        orientation: m.orientation ?? null,
-      })
+setMeasureMeta((prev) => ({
+  ref_unit: m.ref_unit ?? prev?.ref_unit ?? null,
+  ref_meter: m.ref_meter ?? prev?.ref_meter ?? null,
+  pixel_per_meter: m.pixel_per_meter ?? prev?.pixel_per_meter ?? null,
+  orientation: m.orientation ?? prev?.orientation ?? null,
+}))
 
       const linesFromMeasure = parseLinesFromMeasure(m)
       return linesFromMeasure.length ? linesFromMeasure : null
     } catch (e: any) {
-      setMeasureErr(e?.message ?? "Failed to load photo")
-      setPhotoUrl(null)
-      setMeasureMeta(null)
-      return null
+setMeasureErr(e?.message ?? "Failed to load photo")
+setPhotoUrl(null)
+return null
     } finally {
       setMeasureLoading(false)
     }
@@ -447,27 +456,41 @@ export default function PjaDashboard() {
     }
   }
 
-  async function openDetail(item: InspectionRow) {
-    setActive(item)
-    setOpen(true)
-    setNotes(item.reviewNotes ?? "")
-    setImgOpen(false)
+async function openDetail(item: InspectionRow) {
+  setActive(item)
+  setOpen(true)
+  setNotes(item.reviewNotes ?? "")
 
-    setMeasureMeta((prev) => ({
-      ...(prev ?? {}),
-      ref_unit: item.ref_unit ?? prev?.ref_unit ?? null,
-      ref_meter: item.ref_meter ?? prev?.ref_meter ?? null,
-    }))
+  setRefVerify(
+    item.ref_verify_ok === true ? true : item.ref_verify_ok === false ? false : null
+  )
 
-    const linesFromMeasure = await fetchLatestMeasure(item.id)
-    const loadedLines = linesFromMeasure ?? (await fetchLinesForInspection(item.id, item.linesCount))
+  setRefHeight(
+    item.ref_verify_meter != null
+      ? String(item.ref_verify_meter)
+      : item.ref_meter != null
+        ? String(item.ref_meter)
+        : ""
+  )
 
-    setLines(loadedLines)
+  setImgOpen(false)
 
-    const init: Record<string, boolean | null> = {}
-    loadedLines.forEach((ln) => (init[ln.label] = ln.ok ?? null))
-    setLineVerify(init)
-  }
+  setMeasureMeta({
+    ref_unit: item.ref_unit ?? null,
+    ref_meter: item.ref_meter ?? null,
+    pixel_per_meter: null,
+    orientation: null,
+  })
+
+  const linesFromMeasure = await fetchLatestMeasure(item.id)
+  const loadedLines = linesFromMeasure ?? (await fetchLinesForInspection(item.id, item.linesCount))
+
+  setLines(loadedLines)
+
+  const init: Record<string, boolean | null> = {}
+  loadedLines.forEach((ln) => (init[ln.label] = ln.ok ?? null))
+  setLineVerify(init)
+}
 
   const allVerified = useMemo(() => {
     if (!lines.length) return false
@@ -478,15 +501,36 @@ export default function PjaDashboard() {
     return getLimitM(measureMeta?.ref_unit ?? active?.ref_unit ?? null)
   }, [measureMeta?.ref_unit, active?.ref_unit])
 
+  const refHeightNumber = useMemo(() => {
+    const n = Number(refHeight)
+    return Number.isFinite(n) ? n : null
+  }, [refHeight])
+
+  const refVerifiedComplete = useMemo(() => {
+    return refVerify !== null && refHeight.trim() !== "" && refHeightNumber !== null
+  }, [refVerify, refHeight, refHeightNumber])
+
+  const canSubmit = useMemo(() => {
+    return allVerified && refVerifiedComplete
+  }, [allVerified, refVerifiedComplete])
+
   async function send() {
     if (!active) return
-    if (!allVerified) return
+    if (!canSubmit) return
     if (isSubmitting) return
 
     try {
       setIsSubmitting(true)
       setSubmitStatus("loading")
       setSubmitMsg("Mengirim verifikasi & menyimpan hasil...")
+
+      if (refVerify === null) {
+        throw new Error("Verifikasi unit referensi belum dipilih.")
+      }
+
+      if (refHeight.trim() === "" || refHeightNumber == null) {
+        throw new Error("Tinggi referensi wajib diisi.")
+      }
 
       const missingHeight = lines.filter((ln) => ln.heightM == null)
       if (missingHeight.length) {
@@ -525,6 +569,8 @@ export default function PjaDashboard() {
           reviewed_by: pjaName,
           review_notes: notes || null,
           lines_ok_count: okCount,
+          ref_verify_ok: refVerify,
+          ref_verify_meter: refHeightNumber,
         }),
       })
 
@@ -696,42 +742,41 @@ export default function PjaDashboard() {
                   Last update: {fmtLastRefresh(lastRefreshAt)}
                 </span>
 
-<label
-  className="inline-flex items-center gap-2 rounded-xl border border-buma-border bg-white px-3 py-1.5 cursor-pointer select-none transition hover:bg-black/5"
-  title="Toggle auto refresh data"
->
-  <span className="flex flex-col leading-none">
-    <span className="text-[10px] font-bold uppercase tracking-wide text-buma-muted">
-      Auto Refresh
-    </span>
-    <span
-      className={cls(
-        "mt-0.5 text-[11px] font-extrabold",
-        autoRefresh ? "text-buma-green" : "text-buma-muted"
-      )}
-    >
-      {autoRefresh ? "Active" : "Off"}
-    </span>
-  </span>
+                <label
+                  className="inline-flex h-[38px] items-center gap-2 rounded-xl border border-buma-border bg-white px-3 cursor-pointer select-none transition hover:bg-black/5"
+                  title="Toggle auto refresh data"
+                >
+                  <span className="text-[11px] font-extrabold text-buma-text whitespace-nowrap">
+                    Auto Refresh
+                  </span>
 
-  <span className="relative inline-flex items-center shrink-0">
-    <input
-      type="checkbox"
-      checked={autoRefresh}
-      onChange={() => setAutoRefresh((v) => !v)}
-      className="sr-only peer"
-    />
-    <span
-      className="
-        relative h-6 w-11 rounded-full bg-slate-200 transition
+                  <span
+                    className={cls(
+                      "text-[11px] font-black whitespace-nowrap",
+                      autoRefresh ? "text-buma-green" : "text-buma-muted"
+                    )}
+                  >
+                    {autoRefresh ? "ON" : "OFF"}
+                  </span>
+
+                  <span className="relative inline-flex items-center shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={autoRefresh}
+                      onChange={() => setAutoRefresh((v) => !v)}
+                      className="sr-only peer"
+                    />
+                    <span
+                      className="
+        relative h-5 w-9 rounded-full bg-slate-200 transition
         peer-checked:bg-emerald-500/20
         after:absolute after:left-[2px] after:top-[2px]
-        after:h-5 after:w-5 after:rounded-full after:bg-slate-500 after:shadow-sm after:transition
-        peer-checked:after:translate-x-5 peer-checked:after:bg-emerald-600
+        after:h-4 after:w-4 after:rounded-full after:bg-slate-500 after:shadow-sm after:transition
+        peer-checked:after:translate-x-4 peer-checked:after:bg-emerald-600
       "
-    />
-  </span>
-</label>
+                    />
+                  </span>
+                </label>
 
                 <button
                   type="button"
@@ -1014,135 +1059,353 @@ export default function PjaDashboard() {
                     ) : null}
                   </div>
 
-                  {/* RIGHT */}
-                  <div className="space-y-3">
-                    <div className="rounded-2xl border border-buma-border bg-white p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-extrabold text-buma-text">Verifikasi Tiap Titik</div>
-                          <div className="mt-1 text-xs text-buma-muted">Pilih status tiap titik (A/B/C/…).</div>
-                        </div>
-                        <div className="shrink-0 rounded-2xl border border-buma-border bg-buma-bg px-3 py-2 text-xs font-extrabold text-buma-muted">
-                          Limit {standardM.toFixed(1)} m
-                        </div>
-                      </div>
+           {/* RIGHT */}
+<div className="space-y-3">
+{/* Card Verifikasi Unit Referensi */}
+<div
+  className="
+    relative rounded-3xl
+    border border-buma-border
+    bg-white
+    p-3 sm:p-4
+    shadow-soft
+    before:absolute before:inset-0 before:rounded-3xl
+    before:border before:border-black/5
+    before:pointer-events-none
+  "
+>
+  <div>
+    <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+      Verifikasi Unit Referensi
+    </div>
 
-                      <div className="mt-3 space-y-2">
-                        {lines.map((ln) => {
-                          const v = lineVerify[ln.label] ?? null
+    <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+      Pastikan unit referensi dan tinggi referensinya sudah benar.
+    </div>
+  </div>
 
-                          const toggleVal = (next: boolean) => {
-                            setLineVerify((prev) => {
-                              const cur = prev[ln.label]
-                              return { ...prev, [ln.label]: cur === next ? null : next }
-                            })
-                          }
+  {/* REF UNIT + TINGGI REFERENSI (slim) */}
+  <div className="mt-3 overflow-hidden rounded-2xl border border-buma-border bg-gradient-to-r from-buma-bg to-white shadow-sm">
+    <div className="grid grid-cols-[118px_1fr] items-stretch">
+      {/* kiri */}
+      <div className="flex min-h-[68px] flex-col justify-center px-3 py-2.5">
+        <div className="text-[9px] uppercase tracking-[0.18em] text-buma-muted">
+          Ref Unit
+        </div>
+        <div className="mt-0.5 text-[15px] font-extrabold leading-none text-buma-text">
+          {measureMeta?.ref_unit ?? active?.ref_unit ?? "—"}
+        </div>
+      </div>
 
-                          return (
-                            <div key={ln.label} className="rounded-2xl border border-buma-border bg-buma-bg p-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-[10px] font-semibold text-buma-muted leading-none">titik</span>
-                                    <span className="mt-1 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-buma-border bg-white text-sm font-extrabold text-buma-text">
-                                      {ln.label}
-                                    </span>
-                                  </div>
+      {/* kanan */}
+      <div className="flex min-h-[68px] flex-col justify-center border-l border-buma-border/70 bg-white/60 px-3 py-2.5">
+        <label className="text-[9px] uppercase tracking-[0.18em] text-buma-muted">
+          Tinggi Referensi
+        </label>
 
-                                  <div className="min-w-0">
-                                    <div className="text-[11px] font-semibold text-buma-muted">Tinggi</div>
-                                    <div className="mt-0.5 text-sm font-extrabold text-buma-text">
-                                      {ln.heightM == null ? "—" : `${ln.heightM.toFixed(2)} m`}
-                                    </div>
-                                  </div>
-                                </div>
+        <div className="relative mt-0.5">
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={refHeight}
+            onChange={(e) => setRefHeight(e.target.value)}
+            placeholder="0.00"
+            className="
+              w-full border-0 bg-transparent
+              px-0 pr-6 py-0
+              text-[15px] font-extrabold leading-none text-buma-text
+              outline-none
+              placeholder:text-buma-muted/70
+            "
+          />
+          <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[11px] font-bold text-buma-muted">
+            m
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
 
-                                <span
-                                  className={cls(
-                                    "shrink-0 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-extrabold",
-                                    v === null
-                                      ? "border-buma-border bg-white text-buma-muted"
-                                      : v
-                                        ? "border-buma-blue/30 bg-buma-blue/10 text-buma-blue"
-                                        : "border-red-500/30 bg-red-500/10 text-red-600"
-                                  )}
-                                >
-                                  {v === null ? "Belum Diverifikasi" : v ? "Sesuai" : "Tidak sesuai"}
-                                </span>
-                              </div>
+  {/* BUTTON */}
+  <div className="mt-3 grid grid-cols-2 gap-2">
+    <button
+      type="button"
+      onClick={() => setRefVerify((prev) => (prev === true ? null : true))}
+      className={cls(
+        "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+        refVerify === true
+          ? "border-buma-blue/40 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+          : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+      )}
+    >
+      <span
+        className={cls(
+          "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px]",
+          refVerify === true
+            ? "border-buma-blue/40 bg-buma-blue/10"
+            : "border-buma-border bg-buma-bg"
+        )}
+      >
+        {refVerify === true ? "✓" : ""}
+      </span>
+      Sesuai
+    </button>
 
-                              <div className="mt-3 grid grid-cols-2 gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleVal(true)}
-                                  className={cls(
-                                    "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none",
-                                    v === true
-                                      ? "border-buma-blue/40 bg-buma-blue/10 text-buma-blue"
-                                      : "border-buma-border bg-white text-buma-text hover:bg-black/5"
-                                  )}
-                                  aria-pressed={v === true}
-                                >
-                                  <span
-                                    className={cls(
-                                      "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px] leading-none",
-                                      v === true ? "border-buma-blue/40 bg-buma-blue/10" : "border-buma-border bg-buma-bg"
-                                    )}
-                                  >
-                                    {v === true ? "✓" : ""}
-                                  </span>
-                                  Sesuai
-                                </button>
+    <button
+      type="button"
+      onClick={() => setRefVerify((prev) => (prev === false ? null : false))}
+      className={cls(
+        "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+        refVerify === false
+          ? "border-red-500/35 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+          : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+      )}
+    >
+      <span
+        className={cls(
+          "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px]",
+          refVerify === false
+            ? "border-red-500/35 bg-red-500/10"
+            : "border-buma-border bg-buma-bg"
+        )}
+      >
+        {refVerify === false ? "✓" : ""}
+      </span>
+      Tidak sesuai
+    </button>
+  </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => toggleVal(false)}
-                                  className={cls(
-                                    "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none",
-                                    v === false
-                                      ? "border-red-500/35 bg-red-500/10 text-red-600"
-                                      : "border-buma-border bg-white text-buma-text hover:bg-black/5"
-                                  )}
-                                  aria-pressed={v === false}
-                                >
-                                  <span
-                                    className={cls(
-                                      "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px] leading-none",
-                                      v === false ? "border-red-500/35 bg-red-500/10" : "border-buma-border bg-buma-bg"
-                                    )}
-                                  >
-                                    {v === false ? "✓" : ""}
-                                  </span>
-                                  Tidak sesuai
-                                </button>
-                              </div>
+  {/* STATUS */}
+  <div className="mt-3">
+    <span
+      className={cls(
+        "inline-flex rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
+        refVerify === null
+          ? "border-buma-border bg-white text-buma-muted"
+          : refVerify
+            ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+            : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+      )}
+    >
+      {refVerify === null
+        ? "BELUM DIVERIFIKASI"
+        : refVerify
+          ? "REFERENSI SESUAI"
+          : "REFERENSI TIDAK SESUAI"}
+    </span>
+  </div>
 
-                              <div className="mt-2 text-[11px] text-buma-muted">
-                                Klik opsi yang sama sekali lagi untuk <b className="text-buma-text">membatalkan</b> pilihan.
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+  <div className="mt-2 text-[10px] leading-relaxed text-buma-muted">
+    Klik opsi yang sama lagi untuk <b className="text-buma-text">membatalkan</b> pilihan.
+  </div>
+</div>
+
+  {/* Card Verifikasi Tiap Titik */}
+  <div
+    className="
+      relative rounded-3xl
+      border border-buma-border
+      bg-white
+      p-3 sm:p-4
+      shadow-soft
+      before:absolute before:inset-0 before:rounded-3xl
+      before:border before:border-black/5
+      before:pointer-events-none
+    "
+  >
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+          Verifikasi Tiap Titik
+        </div>
+        <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+          Pilih status tiap titik (A/B/C/…).
+        </div>
+      </div>
+
+      <div
+        className="
+          shrink-0 rounded-xl
+          border border-buma-border/70
+          bg-gradient-to-r from-buma-bg to-white
+          px-3 py-1.5
+          text-[11px] font-extrabold text-buma-muted
+          shadow-sm
+        "
+      >
+        Limit {standardM.toFixed(1)} m
+      </div>
+    </div>
+
+    <div className="mt-3 space-y-2.5">
+      {lines.map((ln) => {
+        const v = lineVerify[ln.label] ?? null
+
+        const toggleVal = (next: boolean) => {
+          setLineVerify((prev) => {
+            const cur = prev[ln.label]
+            return { ...prev, [ln.label]: cur === next ? null : next }
+          })
+        }
+
+        return (
+          <div
+            key={ln.label}
+            className="
+              relative rounded-2xl
+              border border-buma-border
+              bg-gradient-to-b from-buma-bg to-white
+              p-2.5 sm:p-3
+              shadow-sm
+              before:absolute before:inset-0 before:rounded-2xl
+              before:border before:border-black/5
+              before:pointer-events-none
+            "
+          >
+            <div className="rounded-xl border border-buma-border/80 bg-white p-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-semibold leading-none text-buma-muted">
+                      titik
+                    </span>
+
+                    <span
+                      className="
+                        relative mt-1 inline-flex h-10 w-10
+                        items-center justify-center
+                        rounded-xl border border-buma-border
+                        bg-gradient-to-b from-white to-buma-bg
+                        text-sm font-extrabold text-buma-text
+                        shadow-sm
+                      "
+                    >
+                      <span className="absolute inset-1 rounded-lg bg-white/40" />
+                      <span className="relative">{ln.label}</span>
+                    </span>
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-widest text-buma-muted">
+                      Tinggi
                     </div>
-
-                    <div className="rounded-2xl border border-buma-border bg-white p-4">
-                      <div className="text-sm font-extrabold text-buma-text">Catatan</div>
-                      <div className="mt-1 text-xs text-buma-muted">Opsional.</div>
-
-                      <textarea
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Tulis catatan untuk inspeksi ini…"
-                        className="mt-3 w-full resize-none rounded-2xl border border-buma-border bg-white px-3 py-2 text-sm text-buma-text placeholder:text-buma-muted outline-none focus:border-buma-blue/50"
-                        rows={4}
-                      />
-                      <div className="mt-1 text-right text-[11px] text-buma-muted">{notes.length}/1000</div>
+                    <div className="mt-0.5 text-[14px] font-extrabold text-buma-text tabular-nums">
+                      {ln.heightM == null ? "—" : `${ln.heightM.toFixed(2)} m`}
                     </div>
                   </div>
                 </div>
+
+                <span
+                  className={cls(
+                    "shrink-0 rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
+                    v === null
+                      ? "border-buma-border bg-white text-buma-muted"
+                      : v
+                        ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                        : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+                  )}
+                >
+                  {v === null ? "BELUM" : v ? "SESUAI" : "TIDAK SESUAI"}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-2.5 rounded-xl border border-buma-border/80 bg-white p-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggleVal(true)}
+                  className={cls(
+                    "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+                    v === true
+                      ? "border-buma-blue/40 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                      : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                  )}
+                  aria-pressed={v === true}
+                >
+                  <span
+                    className={cls(
+                      "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px] leading-none",
+                      v === true
+                        ? "border-buma-blue/40 bg-buma-blue/10"
+                        : "border-buma-border bg-buma-bg"
+                    )}
+                  >
+                    {v === true ? "✓" : ""}
+                  </span>
+                  Sesuai
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggleVal(false)}
+                  className={cls(
+                    "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+                    v === false
+                      ? "border-red-500/35 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+                      : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                  )}
+                  aria-pressed={v === false}
+                >
+                  <span
+                    className={cls(
+                      "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px] leading-none",
+                      v === false
+                        ? "border-red-500/35 bg-red-500/10"
+                        : "border-buma-border bg-buma-bg"
+                    )}
+                  >
+                    {v === false ? "✓" : ""}
+                  </span>
+                  Tidak sesuai
+                </button>
               </div>
 
+              <div className="mt-2 text-[10px] leading-relaxed text-buma-muted">
+                Klik opsi yang sama sekali lagi untuk <b className="text-buma-text">membatalkan</b> pilihan.
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  </div>
+
+  {/* Card Catatan */}
+  <div
+    className="
+      relative rounded-3xl
+      border border-buma-border
+      bg-white
+      p-3 sm:p-4
+      shadow-soft
+      before:absolute before:inset-0 before:rounded-3xl
+      before:border before:border-black/5
+      before:pointer-events-none
+    "
+  >
+    <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+      Catatan
+    </div>
+    <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+      Opsional.
+    </div>
+
+    <textarea
+      value={notes}
+      onChange={(e) => setNotes(e.target.value)}
+      placeholder="Tulis catatan untuk inspeksi ini…"
+      className="mt-3 w-full resize-none rounded-2xl border border-buma-border bg-gradient-to-b from-buma-bg to-white px-3 py-2.5 text-sm text-buma-text placeholder:text-buma-muted outline-none transition focus:border-buma-blue/50"
+      rows={4}
+    />
+    <div className="mt-1 text-right text-[11px] text-buma-muted">
+      {notes.length}/1000
+    </div>
+  </div>
+</div>
+</div>
+</div>
               <div className="sticky bottom-0 z-10 border-t border-buma-border bg-white/95 px-4 py-3 md:px-5">
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   <button
@@ -1165,12 +1428,12 @@ export default function PjaDashboard() {
 
                   <button
                     type="button"
-                    disabled={!allVerified || isSubmitting || isDeleting || submitStatus === "loading"}
+                    disabled={!canSubmit || isSubmitting || isDeleting || submitStatus === "loading"}
                     onClick={() => void send()}
                     className="rounded-xl bg-gradient-to-r from-[#2D5EFC] to-buma-blue px-4 py-2.5 text-sm font-extrabold text-white shadow-soft hover:opacity-95 disabled:opacity-40"
                     title={
-                      !allVerified
-                        ? "Semua titik harus diverifikasi (Sesuai / Tidak sesuai)"
+                      !canSubmit
+                        ? "Verifikasi unit referensi dan semua titik wajib dilengkapi sebelum kirim"
                         : isSubmitting
                           ? "Mengirim..."
                           : "Kirim verifikasi"
@@ -1180,9 +1443,9 @@ export default function PjaDashboard() {
                   </button>
                 </div>
 
-                {!allVerified ? (
+                {!canSubmit ? (
                   <div className="mt-2 text-xs text-buma-muted">
-                    * Wajib pilih <b className="text-buma-text">Sesuai / Tidak sesuai</b> untuk semua titik sebelum kirim.
+                    * Wajib verifikasi <b className="text-buma-text">unit referensi</b> dan semua titik sebelum kirim.
                   </div>
                 ) : null}
               </div>
