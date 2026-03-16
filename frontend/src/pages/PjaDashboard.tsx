@@ -11,8 +11,8 @@ const AUTO_REFRESH_MS = 10000
 
 type Shift = "DAY" | "NIGHT"
 type Pelaksanaan = "START" | "MID" | "END"
-type ReviewStatus = "PENDING" | "VALID" | "REJECT"
-type TabKey = "PENDING" | "VALID" | "REJECT" | "ALL"
+type ReviewStatus = "PENDING" | "VALID"
+type TabKey = "PENDING" | "VALID" | "ALL"
 
 type InspectionRow = {
   id: string
@@ -97,8 +97,6 @@ function fmtLastRefresh(iso: string | null) {
 function pillReview(review: ReviewStatus) {
   if (review === "VALID")
     return "border-buma-green/30 bg-gradient-to-r from-buma-green/15 to-buma-green/5 text-buma-green"
-  if (review === "REJECT")
-    return "border-red-500/30 bg-gradient-to-r from-red-500/15 to-red-500/5 text-red-600"
   if (review === "PENDING")
     return "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue"
   return "bg-black/5 text-buma-muted border-buma-border"
@@ -108,8 +106,6 @@ function tabActiveClass(k: TabKey) {
   switch (k) {
     case "VALID":
       return "border-buma-green/30 bg-gradient-to-r from-buma-green/15 to-buma-green/5 text-buma-green shadow-sm"
-    case "REJECT":
-      return "border-red-500/30 bg-gradient-to-r from-red-500/15 to-red-500/5 text-red-600 shadow-sm"
     case "PENDING":
       return "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue shadow-sm"
     case "ALL":
@@ -308,7 +304,7 @@ export default function PjaDashboard() {
         linesOkCount: Number(x.lines_ok_count ?? 0),
         maxHeightM: Number(x.max_height_m ?? 0),
         reviewStatus: (
-          x.review_status === "VALID" || x.review_status === "REJECT" || x.review_status === "PENDING"
+          x.review_status === "VALID" || x.review_status === "PENDING"
             ? x.review_status
             : "PENDING"
         ) as ReviewStatus,
@@ -352,7 +348,7 @@ export default function PjaDashboard() {
   }, [autoRefresh, open, isSubmitting, isDeleting, submitStatus])
 
   const counts = useMemo(() => {
-    const c = { ALL: rows.length, PENDING: 0, VALID: 0, REJECT: 0 }
+    const c = { ALL: rows.length, PENDING: 0, VALID: 0}
     rows.forEach((x) => c[x.reviewStatus]++)
     return c
   }, [rows])
@@ -696,9 +692,6 @@ async function openDetail(item: InspectionRow) {
               <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-extrabold text-white/85 backdrop-blur">
                 Valid: {counts.VALID}
               </span>
-              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-extrabold text-white/85 backdrop-blur">
-                Reject: {counts.REJECT}
-              </span>
             </div>
           </div>
         </div>
@@ -719,7 +712,6 @@ async function openDetail(item: InspectionRow) {
                   [
                     ["PENDING", `Pending ${counts.PENDING}`],
                     ["VALID", `Valid ${counts.VALID}`],
-                    ["REJECT", `Reject ${counts.REJECT}`],
                     ["ALL", `All ${counts.ALL}`],
                   ] as const
                 ).map(([k, label]) => (

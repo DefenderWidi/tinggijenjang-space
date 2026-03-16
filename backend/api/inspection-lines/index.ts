@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
-import { supabaseAdmin } from "../../lib/supabaseAdmin.js"
+import { supabaseAdmin } from "../_lib/supabaseAdmin.js"
 
 function setCors(res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*")

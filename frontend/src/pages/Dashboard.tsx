@@ -3,7 +3,6 @@ import AppLayout from "../layouts/AppLayout"
 import {
   ResponsiveContainer,
   Tooltip,
-  Legend,
   PieChart,
   Pie,
   Cell,
@@ -12,6 +11,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  LabelList,
 } from "recharts"
 import * as XLSX from "xlsx"
 import { getLimitM } from "../config/reference"
@@ -302,32 +302,35 @@ function EmptyState({ title, desc }: { title: string; desc: string }) {
   )
 }
 
-function DonutCompliance({ ok, bad }: { ok: number; bad: number }) {
-  const total = Math.max(0, ok + bad)
-  const okPct = total === 0 ? 0 : Math.round((ok / total) * 100)
-
+function DonutCompliance({
+  verified,
+  ok,
+  bad,
+  unverified,
+  total,
+}: {
+  verified: number
+  ok: number
+  bad: number
+  unverified: number
+  total: number
+}) {
   const data = [
-    { name: "Sesuai", value: ok },
-    { name: "Tidak sesuai", value: bad },
+    { name: "Diverifikasi", value: verified, color: "#2563EB" },
+    { name: "Sesuai", value: ok, color: "#15803D" },
+    { name: "Tidak sesuai", value: bad, color: "#EF4444" },
+    { name: "Belum diverifikasi", value: unverified, color: "#9CA3AF" },
   ]
-  const COLORS = ["#15803D", "#EF4444"]
 
   return (
     <div className="rounded-3xl border border-buma-border bg-white shadow-soft">
       <div className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">
-              Kesesuaian Titik
-            </div>
-            <div className="mt-1 text-sm text-buma-muted">
-              Perbandingan <b className="text-buma-text">jumlah garis</b> yang sesuai vs tidak sesuai.
-            </div>
+        <div>
+          <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">
+            Kesesuaian Titik
           </div>
-
-          <div className="rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-xs text-buma-muted">
-            <span className="font-semibold text-buma-text">Compliance: </span>
-            {okPct}%
+          <div className="mt-1 text-sm leading-relaxed text-buma-muted">
+            Menampilkan jumlah garis yang sudah diverifikasi, sesuai, tidak sesuai, dan belum diverifikasi.
           </div>
         </div>
 
@@ -336,35 +339,80 @@ function DonutCompliance({ ok, bad }: { ok: number; bad: number }) {
             Belum ada data untuk ditampilkan pada grafik.
           </div>
         ) : (
-          <div className="mt-4 grid gap-4 md:grid-cols-[260px_1fr] md:items-center">
-            <div className="h-[210px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={data}
-                    dataKey="value"
-                    innerRadius={62}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    stroke="rgba(0,0,0,0.06)"
-                  >
-                    {data.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend wrapperStyle={{ marginTop: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+          <>
+            <div className="mt-4 grid gap-4 xl:grid-cols-[260px_1fr] xl:items-center">
+              {/* LEFT: DONUT + LEGEND */}
+              <div className="min-w-0">
+                <div className="relative mx-auto w-full max-w-[220px]">
+                  <div className="h-[210px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={data}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius={50}
+                          outerRadius={78}
+                          paddingAngle={2}
+                          stroke="rgba(255,255,255,0.95)"
+                          strokeWidth={3}
+                        >
+                          {data.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <StatPill label="Garis sesuai" value={`${ok}`} tone="ok" />
-              <StatPill label="Garis tidak sesuai" value={`${bad}`} tone="warn" />
-              <StatPill label="Total garis" value={`${total}`} tone="info" />
-              <StatPill label="Persentase sesuai" value={`${okPct}%`} tone="ok" />
+                        <Tooltip
+                          formatter={(value: number | string | undefined) => [
+                            `${value ?? 0}`,
+                            "Jumlah garis",
+                          ]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* center label */}
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-buma-muted">
+                      Total
+                    </div>
+                    <div className="mt-0.5 text-2xl font-extrabold tracking-tight text-buma-text">
+                      {total}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-2 grid grid-cols-2 gap-1">
+                  {data.map((item) => (
+                    <div key={item.name} className="flex items-center gap-2 px-1 py-1">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="truncate text-[11px] font-semibold text-buma-text">
+                        {item.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* RIGHT: SUMMARY */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <StatPill label="Garis diverifikasi" value={`${verified}`} tone="info" />
+                <StatPill label="Garis sesuai" value={`${ok}`} tone="ok" />
+                <StatPill label="Garis tidak sesuai" value={`${bad}`} tone="warn" />
+
+                <div className="rounded-2xl border border-gray-400/30 bg-gradient-to-r from-gray-400/15 to-gray-400/5 px-4 py-3 text-gray-600 shadow-soft">
+                  <div className="text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                    Garis belum diverifikasi
+                  </div>
+                  <div className="mt-1 text-lg font-extrabold">{unverified}</div>
+                </div>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -428,31 +476,38 @@ function ActualDistributionChart({
     total,
     data,
     fill,
-    legendLabel,
+    accentClass,
   }: {
     title: string
     total: number
     data: Array<{ label: string; value: number }>
     fill: string
-    legendLabel: string
+    accentClass: string
   }) {
+    const maxValue = Math.max(...data.map((x) => x.value), 0)
+
     return (
-      <div className="rounded-2xl border border-buma-border bg-white p-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="rounded-3xl border border-buma-border bg-gradient-to-b from-white to-buma-bg/35 p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+            <div className="text-[15px] font-extrabold tracking-wide text-buma-text">
               {title}
             </div>
           </div>
 
-          <div className="rounded-xl border border-buma-border bg-buma-bg px-3 py-2 text-[11px] font-extrabold text-buma-muted">
+          <div
+            className={cls(
+              "shrink-0 rounded-2xl border px-3 py-2 text-[11px] font-extrabold shadow-sm",
+              accentClass
+            )}
+          >
             Total titik: <span className="text-buma-text">{total}</span>
           </div>
         </div>
 
-        <div className="mt-3 h-[250px] w-full">
+        <div className="mt-3 h-[210px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} barCategoryGap={20}>
+            <BarChart data={data} barCategoryGap={30}>
               <CartesianGrid stroke="rgba(0,0,0,0.06)" vertical={false} />
               <XAxis
                 dataKey="label"
@@ -464,20 +519,39 @@ function ActualDistributionChart({
                 allowDecimals={false}
                 tickLine={false}
                 axisLine={false}
+                domain={[0, Math.max(maxValue + 5, 5)]}
+                tick={{ fontSize: 11 }}
+                width={30}
               />
               <Tooltip
+                cursor={{ fill: "rgba(0,0,0,0.03)" }}
                 labelFormatter={(label) => `Kategori: ${String(label ?? "")}`}
-                formatter={(value: number | string | undefined) => [`${value ?? 0} titik`, legendLabel]}
+                formatter={(value: number | string | undefined) => [`${value ?? 0} titik`, "Jumlah titik"]}
               />
-              <Legend />
               <Bar
                 dataKey="value"
-                name={legendLabel}
                 fill={fill}
-                radius={[10, 10, 0, 0]}
-              />
+                radius={[12, 12, 0, 0]}
+                maxBarSize={40}
+              >
+                <LabelList
+                  dataKey="value"
+                  position="top"
+                  className="fill-buma-text"
+                  fontSize={11}
+                  fontWeight={700}
+                />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
+        </div>
+
+        <div className="mt-2 flex items-center justify-center gap-2 text-[12px] font-semibold text-buma-muted">
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: fill }}
+          />
+          Jumlah titik {title}
         </div>
       </div>
     )
@@ -500,10 +574,7 @@ function ActualDistributionChart({
         {loading ? (
           <div className="mt-5 flex items-center justify-center rounded-2xl border border-buma-border bg-white p-8">
             <div className="relative flex items-center justify-center">
-              {/* Outer Ring */}
               <div className="h-16 w-16 animate-spin rounded-full border-4 border-transparent border-t-buma-green border-r-buma-green/40 sm:h-20 sm:w-20" />
-
-              {/* Inner Ring */}
               <div className="absolute h-11 w-11 animate-[spin_1.2s_linear_reverse_infinite] rounded-full border-4 border-transparent border-t-buma-blue border-l-buma-blue/40 sm:h-14 sm:w-14" />
             </div>
           </div>
@@ -518,14 +589,14 @@ function ActualDistributionChart({
               total={totalShovel}
               data={shovelData}
               fill="#15803D"
-              legendLabel="Shovel"
+              accentClass="border-buma-green/25 bg-gradient-to-r from-buma-green/10 to-transparent text-buma-green"
             />
             <Section
               title="Backhoe"
               total={totalBackhoe}
               data={backhoeData}
               fill="#2563EB"
-              legendLabel="Backhoe"
+              accentClass="border-buma-blue/25 bg-gradient-to-r from-buma-blue/10 to-transparent text-buma-blue"
             />
           </div>
         )}
@@ -1646,12 +1717,27 @@ export default function Dashboard() {
     }
   }
 
-  const compliance = useMemo(() => {
-    const ok = inspectionsReviewed.reduce((s, x) => s + (x.linesOkCount ?? 0), 0)
-    const totalLines = inspectionsReviewed.reduce((s, x) => s + (x.linesCount ?? 0), 0)
-    const bad = Math.max(0, totalLines - ok)
-    return { ok, bad, total: totalLines }
-  }, [inspectionsReviewed])
+const compliance = useMemo(() => {
+  const total = inspections.reduce((s, x) => s + (x.linesCount ?? 0), 0)
+
+  const ok = inspections.reduce((s, x) => s + (x.linesOkCount ?? 0), 0)
+
+  const verified = inspections.reduce((s, x) => {
+    if (x.reviewStatus === "PENDING" || !x.reviewedBy) return s
+    return s + (x.linesCount ?? 0)
+  }, 0)
+
+  const bad = Math.max(0, verified - ok)
+  const unverified = Math.max(0, total - verified)
+
+  return {
+    verified,
+    ok,
+    bad,
+    unverified,
+    total,
+  }
+}, [inspections])
 
   const isEmpty = inspections.length === 0
 
@@ -1813,12 +1899,13 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-              <StatPill label="Total Garis" value={`${compliance.total}`} tone="info" />
-              <StatPill label="Garis Sesuai" value={`${compliance.ok}`} tone="ok" />
-              <StatPill label="Garis Tidak Sesuai" value={`${compliance.bad}`} tone="warn" />
-              <StatPill label="Mode" value={mode} tone="info" />
-            </div>
+     <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+  <StatPill label="Total Garis" value={`${compliance.total}`} tone="info" />
+  <StatPill label="Diverifikasi" value={`${compliance.verified}`} tone="info" />
+  <StatPill label="Garis Sesuai" value={`${compliance.ok}`} tone="ok" />
+  <StatPill label="Garis Tidak Sesuai" value={`${compliance.bad}`} tone="warn" />
+  <StatPill label="Mode" value={mode} tone="info" />
+</div>
           </div>
 
           {/* Controls */}
@@ -1917,7 +2004,13 @@ export default function Dashboard() {
               </div>
             ) : (
               <>
-                <DonutCompliance ok={compliance.ok} bad={compliance.bad} />
+                <DonutCompliance
+  verified={compliance.verified}
+  ok={compliance.ok}
+  bad={compliance.bad}
+  unverified={compliance.unverified}
+  total={compliance.total}
+/>
                 <ActualDistributionChart
                   shovelRows={actualDist.shovel}
                   backhoeRows={actualDist.backhoe}
