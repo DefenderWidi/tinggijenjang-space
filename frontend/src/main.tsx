@@ -9,6 +9,7 @@ import Measure from "./pages/Measure"
 import PjaDashboard from "./pages/PjaDashboard"
 import EvaluatorDashboard from "./pages/Dashboard"
 import Admin from "./pages/Admin"
+import MeasureRoad from "./pages/TrialMeasureRoad"
 
 type ActiveRole = "FIELD" | "PJA" | "EVALUATOR"
 type AccountRole = "USER" | "ADMIN"
@@ -135,6 +136,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
+        <Route path="/internal/measure-road" element={<MeasureRoad />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<Login />} />
