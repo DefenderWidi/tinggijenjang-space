@@ -175,6 +175,38 @@ function fmtSigned(x: number) {
   return x > 0 ? `+${s} m` : `${s} m`
 }
 
+function pointSortValue(label: string) {
+  const s = String(label || "").trim().toUpperCase()
+
+  // A, B, C, D, E ...
+  if (/^[A-Z]$/.test(s)) return s.charCodeAt(0)
+
+  // P1, P2, T1, dst
+  const m = s.match(/^([A-Z]+)?(\d+)$/)
+  if (m) return Number(m[2]) + 1000
+
+  return 99999
+}
+
+function summarizePoints(
+  lines: Array<{ label: string; height_m: number | null; ok: boolean | null }>
+) {
+  if (!lines.length) return "—"
+
+  return [...lines]
+    .sort((a, b) => pointSortValue(a.label) - pointSortValue(b.label))
+    .map((ln) => {
+      const h =
+        ln.height_m == null || !Number.isFinite(Number(ln.height_m))
+          ? "—"
+          : `${Number(ln.height_m).toFixed(2)}`
+      const mark =
+        ln.ok === true ? "✓" : ln.ok === false ? "✕" : "•"
+      return `${ln.label}:${h}${h !== "—" ? "m" : ""}${mark}`
+    })
+    .join(" | ")
+}
+
 /* =========================
    Review detail fetchers
 ========================= */
@@ -631,7 +663,6 @@ function DetailTable({
   mode,
   rows,
   onOpenReview,
-
   onExportExcel,
   exportDisabled,
   exportBusy,
@@ -640,7 +671,6 @@ function DetailTable({
   mode: "DAILY" | "WEEKLY"
   rows: InspectionRow[]
   onOpenReview: (r: InspectionRow) => void
-
   onExportExcel: () => void
   exportDisabled: boolean
   exportBusy: boolean
@@ -698,118 +728,169 @@ function DetailTable({
               Tidak ada data pada periode ini.
             </div>
           ) : (
-            <table className="w-full min-w-[1280px] text-sm text-buma-text">
-              <thead>
-                <tr className="border-y border-buma-border text-left text-buma-muted">
-                  <th className="px-4 py-3">Tanggal</th>
-                  <th className="py-3">Waktu</th>
-                  <th className="py-3">Inspector</th>
-                  <th className="py-3">Shift</th>
-                  <th className="py-3">Pelaksanaan</th>
-                  <th className="py-3">Front</th>
-                  <th className="py-3">Total Garis</th>
-                  <th className="py-3">Kesesuaian</th>
-                  <th className="py-3">Reviewer PJA</th>
-                  <th className="py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Aksi</th>
-                </tr>
-              </thead>
+         <table className="w-full min-w-[1260px] text-[13px] text-buma-text">
+<thead className="sticky top-0 z-[1] bg-white">
+  <tr className="border-y border-buma-border text-left text-[11px] font-bold text-buma-muted">
+    <th className="px-3 py-2 min-w-[96px]">Tanggal</th>
+    <th className="px-2 py-2 min-w-[58px]">Waktu</th>
+    <th className="px-2 py-2 min-w-[120px]">Inspector</th>
+    <th className="px-2 py-2 min-w-[62px]">Shift</th>
+    <th className="px-2 py-2 min-w-[96px]">Pelaksanaan</th>
+    <th className="px-2 py-2 min-w-[92px]">Front</th>
+    <th className="px-2 py-2 min-w-[86px] text-center">Ref Unit</th>
+    <th className="px-2 py-2 min-w-[74px] text-center">Limit</th>
+    <th className="px-2 py-2 min-w-[78px] text-center">Max</th>
+    <th className="px-2 py-2 min-w-[54px] text-center">Titik</th>
+    <th className="px-2 py-2 min-w-[108px] text-center">Kesesuaian</th>
+    <th className="px-2 py-2 min-w-[96px]">Reviewer PJA</th>
+    <th className="px-2 py-2 min-w-[88px] text-center">Status</th>
+    <th className="px-3 py-2 min-w-[88px] text-right">Aksi</th>
+  </tr>
+</thead>
 
-              <tbody>
-                {rows.map((r, idx) => {
-                  const { date, time } = formatDateTime(r.inspectedAt)
-                  const zebra = idx % 2 === 0 ? "bg-white" : "bg-buma-bg"
+<tbody>
+  {rows.map((r, idx) => {
+    const { date, time } = formatDateTime(r.inspectedAt)
+    const zebra = idx % 2 === 0 ? "bg-white" : "bg-buma-bg/60"
 
-                  const isReviewed = r.reviewStatus !== "PENDING" && !!r.reviewedBy
-                  const pct = isReviewed ? pctOk(r.linesOkCount, r.linesCount) : 0
+    const isReviewed = r.reviewStatus !== "PENDING" && !!r.reviewedBy
+    const pct = isReviewed ? pctOk(r.linesOkCount, r.linesCount) : 0
+    const limitM = r.refUnit ? getLimitM(r.refUnit) : null
 
-                  const pctCls =
-                    pct >= 90
-                      ? "border-buma-green/30 bg-gradient-to-r from-buma-green/15 to-buma-green/5 text-buma-green"
-                      : pct >= 60
-                        ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue"
-                        : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-red-500/5 text-red-600"
+    const pctCls =
+      pct >= 90
+        ? "border-buma-green/30 bg-gradient-to-r from-buma-green/15 to-buma-green/5 text-buma-green"
+        : pct >= 60
+          ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue"
+          : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-red-500/5 text-red-600"
 
-                  const statusCls =
-                    r.reviewStatus === "VALID"
-                      ? "border-buma-green/30 bg-gradient-to-r from-buma-green/15 to-buma-green/5 text-buma-green"
-                      : r.reviewStatus === "REJECT"
-                        ? "border-red-500/30 bg-gradient-to-r from-red-500/15 to-red-500/5 text-red-600"
-                        : "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue"
+    const statusCls =
+      r.reviewStatus === "VALID"
+        ? "border-buma-green/30 bg-gradient-to-r from-buma-green/15 to-buma-green/5 text-buma-green"
+        : r.reviewStatus === "REJECT"
+          ? "border-red-500/30 bg-gradient-to-r from-red-500/15 to-red-500/5 text-red-600"
+          : "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue"
 
-                  return (
-                    <tr key={r.id} className={cls("border-b border-buma-border hover:bg-black/5", zebra)}>
-                      <td className="px-4 py-3 font-semibold">{date}</td>
-                      <td className="py-3 text-buma-muted">{mode === "DAILY" ? time : "—"}</td>
-                      <td className="py-3">{r.inspector}</td>
-                      <td className="py-3 text-buma-muted">{shiftLabel(r.shift)}</td>
+    return (
+      <tr
+        key={r.id}
+        className={cls(
+          "border-b border-buma-border align-middle transition hover:bg-black/[0.03]",
+          zebra
+        )}
+      >
+        <td className="px-3 py-2.5 font-semibold whitespace-nowrap">{date}</td>
 
-                      <td className="py-3 text-buma-muted">{r.pelaksanaan}</td>
-                      <td className="py-3 text-buma-muted">{r.front}</td>
+        <td className="px-2 py-2.5 text-buma-muted whitespace-nowrap">
+          {mode === "DAILY" ? time : "—"}
+        </td>
 
-                      <td className="py-3">
-                        <span className="inline-flex rounded-full border border-buma-border bg-white px-2.5 py-1 text-xs font-extrabold">
-                          {r.linesCount}
-                        </span>
-                      </td>
+        <td className="px-2 py-2.5 font-medium">
+          <div className="max-w-[120px] truncate" title={r.inspector}>
+            {r.inspector}
+          </div>
+        </td>
 
-                      <td className="py-3">
-                        {isReviewed ? (
-                          <span className={cls("inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-extrabold", pctCls)}>
-                            {pct}%
-                            <span className="text-[11px] font-semibold opacity-80">
-                              ({r.linesOkCount}/{r.linesCount})
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-full border border-buma-border bg-buma-bg px-2.5 py-1 text-xs font-extrabold text-buma-muted">
-                            —
-                          </span>
-                        )}
-                      </td>
+        <td className="px-2 py-2.5 text-buma-muted whitespace-nowrap">
+          {shiftLabel(r.shift)}
+        </td>
 
-                      <td className="py-3">{r.reviewedBy ?? "—"}</td>
+        <td className="px-2 py-2.5 text-buma-muted">
+          <div className="max-w-[96px] truncate" title={r.pelaksanaan}>
+            {r.pelaksanaan}
+          </div>
+        </td>
 
-                      <td className="py-3">
-                        <span className={cls("inline-flex rounded-full border px-2.5 py-1 text-xs font-extrabold", statusCls)}>
-                          {r.reviewStatus}
-                        </span>
-                      </td>
+        <td className="px-2 py-2.5 text-buma-muted">
+          <div className="max-w-[96px] truncate" title={r.front || "—"}>
+            {r.front || "—"}
+          </div>
+        </td>
 
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => onOpenReview(r)}
-                          className="inline-flex items-center gap-1.5 rounded-xl
-                                     border border-buma-border
-                                     bg-gradient-to-r from-black/5 to-transparent
-                                     px-3 py-2 text-xs font-extrabold text-buma-text
-                                     shadow-sm transition-all duration-200
-                                     hover:border-black/30
-                                     hover:bg-gradient-to-r hover:from-black/8 hover:to-transparent
-                                     hover:shadow-md"
-                          title="Lihat detail verifikasi PJA (view only)"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 20 20"
-                            className="opacity-80"
-                          >
-                            <path
-                              fill="currentColor"
-                              d="M6.25 4.5A1.75 1.75 0 0 0 4.5 6.25v7.5c0 .966.784 1.75 1.75 1.75h7.5a1.75 1.75 0 0 0 1.75-1.75v-2a.75.75 0 0 1 1.5 0v2A3.25 3.25 0 0 1 13.75 17h-7.5A3.25 3.25 0 0 1 3 13.75v-7.5A3.25 3.25 0 0 1 6.25 3h2a.75.75 0 0 1 0 1.5zm4.25-.75a.75.75 0 0 1 .75-.75h5a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0V5.56l-3.72 3.72a.75.75 0 1 1-1.06-1.06l3.72-3.72h-3.19a.75.75 0 0 1-.75-.75"
-                            />
-                          </svg>
-                          Detail
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+        <td className="px-2 py-2.5 text-center">
+          <span className="inline-flex min-w-[68px] items-center justify-center rounded-full border border-buma-border bg-white px-2 py-0.5 text-[11px] font-extrabold">
+            {r.refUnit ?? "—"}
+          </span>
+        </td>
+
+        <td className="px-2 py-2.5 text-center tabular-nums whitespace-nowrap">
+          {limitM != null ? `${limitM.toFixed(2)} m` : "—"}
+        </td>
+
+        <td className="px-2 py-2.5 text-center tabular-nums font-semibold whitespace-nowrap">
+          {Number.isFinite(r.maxHeightM) ? `${r.maxHeightM.toFixed(2)} m` : "—"}
+        </td>
+
+        <td className="px-2 py-2.5 text-center">
+          <span className="inline-flex min-w-[30px] items-center justify-center rounded-full border border-buma-border bg-white px-2 py-0.5 text-[11px] font-extrabold">
+            {r.linesCount}
+          </span>
+        </td>
+
+        <td className="px-2 py-2.5 text-center">
+          {isReviewed ? (
+            <span
+              className={cls(
+                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-extrabold",
+                pctCls
+              )}
+            >
+              {pct}%
+              <span className="text-[10px] font-semibold opacity-80">
+                ({r.linesOkCount}/{r.linesCount})
+              </span>
+            </span>
+          ) : (
+            <span className="inline-flex rounded-full border border-buma-border bg-buma-bg px-2 py-0.5 text-[11px] font-extrabold text-buma-muted">
+              —
+            </span>
+          )}
+        </td>
+
+        <td className="px-2 py-2.5">
+          <div className="max-w-[96px] truncate" title={r.reviewedBy ?? "—"}>
+            {r.reviewedBy ?? "—"}
+          </div>
+        </td>
+
+        <td className="px-2 py-2.5 text-center">
+          <span
+            className={cls(
+              "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-extrabold",
+              statusCls
+            )}
+          >
+            {r.reviewStatus}
+          </span>
+        </td>
+
+        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+          <button
+            type="button"
+            onClick={() => onOpenReview(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-buma-border bg-gradient-to-r from-black/5 to-transparent px-2 py-1.5 text-[11px] font-extrabold text-buma-text shadow-sm transition-all duration-200 hover:border-black/30 hover:from-black/8 hover:shadow-md"
+            title="Lihat detail verifikasi PJA (view only)"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 20 20"
+              className="opacity-80"
+            >
+              <path
+                fill="currentColor"
+                d="M6.25 4.5A1.75 1.75 0 0 0 4.5 6.25v7.5c0 .966.784 1.75 1.75 1.75h7.5a1.75 1.75 0 0 0 1.75-1.75v-2a.75.75 0 0 1 1.5 0v2A3.25 3.25 0 0 1 13.75 17h-7.5A3.25 3.25 0 0 1 3 13.75v-7.5A3.25 3.25 0 0 1 6.25 3h2a.75.75 0 0 1 0 1.5zm4.25-.75a.75.75 0 0 1 .75-.75h5a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0V5.56l-3.72 3.72a.75.75 0 1 1-1.06-1.06l3.72-3.72h-3.19a.75.75 0 0 1-.75-.75"
+              />
+            </svg>
+            Detail
+          </button>
+        </td>
+      </tr>
+    )
+  })}
+</tbody>
+</table>
           )}
         </div>
       </div>
@@ -1477,7 +1558,6 @@ export default function Dashboard() {
   }
 
   const [actualDistLoading, setActualDistLoading] = useState(false)
-
   const [actualDist, setActualDist] = useState<{
     shovel: ActualBucketRow[]
     backhoe: ActualBucketRow[]
@@ -1570,6 +1650,8 @@ export default function Dashboard() {
     }
   }
 
+  
+
   async function fetchPhotoUrl(inspectionId: string): Promise<string | null> {
     try {
       const r = await fetch(
@@ -1588,134 +1670,227 @@ export default function Dashboard() {
     }
   }
 
-  async function exportExcelCurrentView() {
-    if (isExporting) return
-    if (!inspections.length) return
+ async function exportExcelCurrentView() {
+  if (isExporting) return
+  if (!inspections.length) return
 
-    try {
-      setIsExporting(true)
-      setExportMsg("Menyiapkan data export...")
+  try {
+    setIsExporting(true)
+    setExportMsg("Menyiapkan data export...")
 
-      // ===== Sheet 1: Inspections (summary) =====
-      const inspectionsSheet = await Promise.all(
-        inspections.map(async (x) => {
+    type RawLine = { label: string; height_m: number | null; ok: boolean | null }
+
+    const exportRows: Array<{
+      inspection: InspectionRow
+      date: string
+      time: string
+      photoUrl: string | null
+      linesRaw: RawLine[]
+    }> = []
+
+    const batchSize = 8
+
+    for (let i = 0; i < inspections.length; i += batchSize) {
+      const batch = inspections.slice(i, i + batchSize)
+      setExportMsg(
+        `Proses mengambil data inspeksi + titik... ${Math.min(i + batchSize, inspections.length)}/${inspections.length}`
+      )
+
+      const res = await Promise.all(
+        batch.map(async (x) => {
           const { date, time } = formatDateTime(x.inspectedAt)
-
-          const photoUrl = await fetchPhotoUrl(x.id)
+          const [photoUrl, linesRaw] = await Promise.all([
+            fetchPhotoUrl(x.id),
+            fetchLinesRaw(x.id),
+          ])
 
           return {
-            inspection_id: x.id,
-            tanggal: date,
-            waktu: mode === "DAILY" ? time : "—",
-
-            inspector: x.inspector,
-            shift: x.shift,
-            pelaksanaan: x.pelaksanaan,
-            front: x.front,
-
-            ref_unit: x.refUnit ?? "",
-            ref_type: (x.refUnit ?? "").startsWith("S")
-              ? "Shovel"
-              : (x.refUnit ?? "").startsWith("B")
-                ? "Backhoe"
-                : "",
-
-            limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
-
-            max_height_m: x.maxHeightM,
-
-            lines_count: x.linesCount,
-            lines_ok_count: x.linesOkCount,
-
-            compliance_pct: pctOk(x.linesOkCount, x.linesCount),
-
-            review_status: x.reviewStatus,
-            reviewed_by: x.reviewedBy ?? "",
-
-            photo_url: photoUrl ?? "",
+            inspection: x,
+            date,
+            time,
+            photoUrl,
+            linesRaw,
           }
         })
       )
 
-      // ===== Sheet 2: Lines (per titik) =====
-      const allLines: Array<any> = []
-      const batchSize = 10
+      exportRows.push(...res)
+    }
 
-      for (let i = 0; i < inspections.length; i += batchSize) {
-        const batch = inspections.slice(i, i + batchSize)
-        setExportMsg(`Ambil detail titik... ${Math.min(i + batchSize, inspections.length)}/${inspections.length}`)
+    // ===== Sheet 1: summary biasa =====
+    const inspectionsSheet = exportRows.map(({ inspection: x, date, time, photoUrl, linesRaw }) => ({
+      inspection_id: x.id,
+      tanggal: date,
+      waktu: mode === "DAILY" ? time : "—",
 
-        const res = await Promise.all(
-          batch.map(async (x) => {
-            const linesRaw = await fetchLinesRaw(x.id)
-            if (!linesRaw.length) {
-              return [{ inspection_id: x.id, label: "", height_m: "", ok: "" }]
-            }
-            return linesRaw.map((ln) => ({
-              inspection_id: x.id,
+      inspector: x.inspector,
+      shift: x.shift,
+      pelaksanaan: x.pelaksanaan,
+      front: x.front,
 
-              ref_unit: x.refUnit ?? "",
-              ref_type: (x.refUnit ?? "").startsWith("S")
-                ? "Shovel"
-                : (x.refUnit ?? "").startsWith("B")
-                  ? "Backhoe"
-                  : "",
+      ref_unit: x.refUnit ?? "",
+      ref_type: (x.refUnit ?? "").startsWith("S")
+        ? "Shovel"
+        : (x.refUnit ?? "").startsWith("B")
+          ? "Backhoe"
+          : "",
 
-              front: x.front,
+      limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
+      max_height_m: x.maxHeightM,
 
-              point_label: ln.label,
+      lines_count: x.linesCount,
+      lines_ok_count: x.linesOkCount,
+      compliance_pct: pctOk(x.linesOkCount, x.linesCount),
 
-              height_m: ln.height_m ?? "",
+      review_status: x.reviewStatus,
+      reviewed_by: x.reviewedBy ?? "",
+      photo_url: photoUrl ?? "",
 
-              limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
+      points_summary: summarizePoints(linesRaw),
+    }))
 
-              delta_m:
-                ln.height_m != null && x.refUnit
-                  ? Number(ln.height_m) - getLimitM(x.refUnit)
-                  : "",
+    // ===== Sheet 2: raw long format per titik =====
+    const allLines: Array<any> = []
 
-              ok:
-                ln.ok === true
-                  ? "TRUE"
-                  : ln.ok === false
-                    ? "FALSE"
-                    : "",
-            }))
-          })
-        )
-
-        res.flat().forEach((row) => allLines.push(row))
+    for (const { inspection: x, date, time, linesRaw } of exportRows) {
+      if (!linesRaw.length) {
+        allLines.push({
+          inspection_id: x.id,
+          tanggal: date,
+          waktu: mode === "DAILY" ? time : "—",
+          inspector: x.inspector,
+          front: x.front,
+          ref_unit: x.refUnit ?? "",
+          ref_type: (x.refUnit ?? "").startsWith("S")
+            ? "Shovel"
+            : (x.refUnit ?? "").startsWith("B")
+              ? "Backhoe"
+              : "",
+          point_label: "",
+          height_m: "",
+          limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
+          delta_m: "",
+          ok: "",
+        })
+        continue
       }
 
-      // ===== Build workbook =====
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(
-        wb,
-        XLSX.utils.json_to_sheet(inspectionsSheet),
-        "Inspections_Summary"
-      )
-
-      XLSX.utils.book_append_sheet(
-        wb,
-        XLSX.utils.json_to_sheet(allLines),
-        "Lines_Detail"
-      )
-
-      // ===== filename: sesuai mode & filter =====
-      const period =
-        mode === "DAILY"
-          ? `${fromDate || "NA"}_to_${toDate || "NA"}`
-          : `${month || "NA"}`
-      const fname = `Dashboard_Export_${safeFilename(mode)}_${safeFilename(period)}_${new Date()
-        .toISOString()
-        .slice(0, 10)}.xlsx`
-
-      XLSX.writeFile(wb, fname)
-    } finally {
-      setIsExporting(false)
-      setExportMsg("")
+      for (const ln of [...linesRaw].sort((a, b) => pointSortValue(a.label) - pointSortValue(b.label))) {
+        allLines.push({
+          inspection_id: x.id,
+          tanggal: date,
+          waktu: mode === "DAILY" ? time : "—",
+          inspector: x.inspector,
+          front: x.front,
+          ref_unit: x.refUnit ?? "",
+          ref_type: (x.refUnit ?? "").startsWith("S")
+            ? "Shovel"
+            : (x.refUnit ?? "").startsWith("B")
+              ? "Backhoe"
+              : "",
+          point_label: ln.label,
+          height_m: ln.height_m ?? "",
+          limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
+          delta_m:
+            ln.height_m != null && x.refUnit
+              ? Number(ln.height_m) - getLimitM(x.refUnit)
+              : "",
+          ok: ln.ok === true ? "TRUE" : ln.ok === false ? "FALSE" : "",
+        })
+      }
     }
+
+    // ===== Sheet 3: analyst view (wide / pivot per titik) =====
+    const analystSheet = exportRows.map(({ inspection: x, date, time, photoUrl, linesRaw }) => {
+      const sorted = [...linesRaw].sort((a, b) => pointSortValue(a.label) - pointSortValue(b.label))
+      const pointMap = new Map(sorted.map((ln) => [String(ln.label).toUpperCase(), ln]))
+
+      const pointCell = (label: string) => {
+        const ln = pointMap.get(label)
+        if (!ln || ln.height_m == null) return ""
+        const status = ln.ok === true ? "OK" : ln.ok === false ? "NOK" : "-"
+        return `${Number(ln.height_m).toFixed(2)} m | ${status}`
+      }
+
+      return {
+        inspection_id: x.id,
+        tanggal: date,
+        waktu: mode === "DAILY" ? time : "—",
+        inspector: x.inspector,
+        shift: shiftLabel(x.shift),
+        pelaksanaan: x.pelaksanaan,
+        front: x.front,
+
+        ref_unit: x.refUnit ?? "",
+        ref_type: (x.refUnit ?? "").startsWith("S")
+          ? "Shovel"
+          : (x.refUnit ?? "").startsWith("B")
+            ? "Backhoe"
+            : "",
+
+        limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
+        max_height_m: x.maxHeightM,
+
+        total_titik: x.linesCount,
+        titik_sesuai: x.linesOkCount,
+        compliance_pct: pctOk(x.linesOkCount, x.linesCount),
+
+        titik_A: pointCell("A"),
+        titik_B: pointCell("B"),
+        titik_C: pointCell("C"),
+        titik_D: pointCell("D"),
+        titik_E: pointCell("E"),
+
+        review_status: x.reviewStatus,
+        reviewed_by: x.reviewedBy ?? "",
+        photo_url: photoUrl ?? "",
+      }
+    })
+
+    const wb = XLSX.utils.book_new()
+
+    const wsSummary = XLSX.utils.json_to_sheet(inspectionsSheet)
+    const wsLines = XLSX.utils.json_to_sheet(allLines)
+    const wsAnalyst = XLSX.utils.json_to_sheet(analystSheet)
+
+    wsSummary["!cols"] = [
+      { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 10 },
+      { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
+      { wch: 18 }, { wch: 50 },
+    ]
+
+    wsLines["!cols"] = [
+      { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 16 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+    ]
+
+    wsAnalyst["!cols"] = [
+      { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 10 },
+      { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+      { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+      { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+      { wch: 14 }, { wch: 16 }, { wch: 28 },
+    ]
+
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Inspections_Summary")
+    XLSX.utils.book_append_sheet(wb, wsLines, "Lines_Detail")
+    XLSX.utils.book_append_sheet(wb, wsAnalyst, "Analyst_View")
+
+    const period =
+      mode === "DAILY"
+        ? `${fromDate || "NA"}_to_${toDate || "NA"}`
+        : `${month || "NA"}`
+    const fname = `Dashboard_Export_${safeFilename(mode)}_${safeFilename(period)}_${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`
+
+    XLSX.writeFile(wb, fname)
+  } finally {
+    setIsExporting(false)
+    setExportMsg("")
   }
+}
 
 const compliance = useMemo(() => {
   const total = inspections.reduce((s, x) => s + (x.linesCount ?? 0), 0)
@@ -2027,15 +2202,15 @@ const compliance = useMemo(() => {
           </div>
 
           <div className="mt-4">
-            <DetailTable
-              mode={mode}
-              rows={inspections}
-              onOpenReview={openReview}
-              onExportExcel={exportExcelCurrentView}
-              exportDisabled={loading || inspections.length === 0}
-              exportBusy={isExporting}
-              exportMsg={exportMsg}
-            />
+<DetailTable
+  mode={mode}
+  rows={inspections}
+  onOpenReview={openReview}
+  onExportExcel={exportExcelCurrentView}
+  exportDisabled={loading || inspections.length === 0}
+  exportBusy={isExporting}
+  exportMsg={exportMsg}
+/>
           </div>
         </>
       )}
