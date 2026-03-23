@@ -188,25 +188,6 @@ function pointSortValue(label: string) {
   return 99999
 }
 
-function summarizePoints(
-  lines: Array<{ label: string; height_m: number | null; ok: boolean | null }>
-) {
-  if (!lines.length) return "—"
-
-  return [...lines]
-    .sort((a, b) => pointSortValue(a.label) - pointSortValue(b.label))
-    .map((ln) => {
-      const h =
-        ln.height_m == null || !Number.isFinite(Number(ln.height_m))
-          ? "—"
-          : `${Number(ln.height_m).toFixed(2)}`
-      const mark =
-        ln.ok === true ? "✓" : ln.ok === false ? "✕" : "•"
-      return `${ln.label}:${h}${h !== "—" ? "m" : ""}${mark}`
-    })
-    .join(" | ")
-}
-
 /* =========================
    Review detail fetchers
 ========================= */
@@ -1717,165 +1698,69 @@ export default function Dashboard() {
       exportRows.push(...res)
     }
 
-    // ===== Sheet 1: summary biasa =====
-    const inspectionsSheet = exportRows.map(({ inspection: x, date, time, photoUrl, linesRaw }) => ({
-      inspection_id: x.id,
-      tanggal: date,
-      waktu: mode === "DAILY" ? time : "—",
-
-      inspector: x.inspector,
-      shift: x.shift,
-      pelaksanaan: x.pelaksanaan,
-      front: x.front,
-
-      ref_unit: x.refUnit ?? "",
-      ref_type: (x.refUnit ?? "").startsWith("S")
-        ? "Shovel"
-        : (x.refUnit ?? "").startsWith("B")
-          ? "Backhoe"
-          : "",
-
-      limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
-      max_height_m: x.maxHeightM,
-
-      lines_count: x.linesCount,
-      lines_ok_count: x.linesOkCount,
-      compliance_pct: pctOk(x.linesOkCount, x.linesCount),
-
-      review_status: x.reviewStatus,
-      reviewed_by: x.reviewedBy ?? "",
-      photo_url: photoUrl ?? "",
-
-      points_summary: summarizePoints(linesRaw),
-    }))
-
-    // ===== Sheet 2: raw long format per titik =====
-    const allLines: Array<any> = []
-
-    for (const { inspection: x, date, time, linesRaw } of exportRows) {
-      if (!linesRaw.length) {
-        allLines.push({
-          inspection_id: x.id,
-          tanggal: date,
-          waktu: mode === "DAILY" ? time : "—",
-          inspector: x.inspector,
-          front: x.front,
-          ref_unit: x.refUnit ?? "",
-          ref_type: (x.refUnit ?? "").startsWith("S")
-            ? "Shovel"
-            : (x.refUnit ?? "").startsWith("B")
-              ? "Backhoe"
-              : "",
-          point_label: "",
-          height_m: "",
-          limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
-          delta_m: "",
-          ok: "",
-        })
-        continue
-      }
-
-      for (const ln of [...linesRaw].sort((a, b) => pointSortValue(a.label) - pointSortValue(b.label))) {
-        allLines.push({
-          inspection_id: x.id,
-          tanggal: date,
-          waktu: mode === "DAILY" ? time : "—",
-          inspector: x.inspector,
-          front: x.front,
-          ref_unit: x.refUnit ?? "",
-          ref_type: (x.refUnit ?? "").startsWith("S")
-            ? "Shovel"
-            : (x.refUnit ?? "").startsWith("B")
-              ? "Backhoe"
-              : "",
-          point_label: ln.label,
-          height_m: ln.height_m ?? "",
-          limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
-          delta_m:
-            ln.height_m != null && x.refUnit
-              ? Number(ln.height_m) - getLimitM(x.refUnit)
-              : "",
-          ok: ln.ok === true ? "TRUE" : ln.ok === false ? "FALSE" : "",
-        })
-      }
-    }
-
     // ===== Sheet 3: analyst view (wide / pivot per titik) =====
-    const analystSheet = exportRows.map(({ inspection: x, date, time, photoUrl, linesRaw }) => {
-      const sorted = [...linesRaw].sort((a, b) => pointSortValue(a.label) - pointSortValue(b.label))
-      const pointMap = new Map(sorted.map((ln) => [String(ln.label).toUpperCase(), ln]))
+const analystSheet = exportRows.map(({ inspection: x, date, time, photoUrl, linesRaw }) => {
+  const sorted = [...linesRaw].sort((a, b) => pointSortValue(a.label) - pointSortValue(b.label))
+  const pointMap = new Map(sorted.map((ln) => [String(ln.label).toUpperCase(), ln]))
 
-      const pointCell = (label: string) => {
-        const ln = pointMap.get(label)
-        if (!ln || ln.height_m == null) return ""
-        const status = ln.ok === true ? "OK" : ln.ok === false ? "NOK" : "-"
-        return `${Number(ln.height_m).toFixed(2)} m | ${status}`
-      }
+  const isReviewed = x.reviewStatus !== "PENDING" && !!x.reviewedBy
+  const titikSesuai = isReviewed ? x.linesOkCount : 0
+  const compliancePct = isReviewed ? pctOk(titikSesuai, x.linesCount) : 0
 
-      return {
-        inspection_id: x.id,
-        tanggal: date,
-        waktu: mode === "DAILY" ? time : "—",
-        inspector: x.inspector,
-        shift: shiftLabel(x.shift),
-        pelaksanaan: x.pelaksanaan,
-        front: x.front,
+  const pointCell = (label: string) => {
+    const ln = pointMap.get(label)
+    if (!ln || ln.height_m == null) return ""
+    const status = ln.ok === true ? "OK" : ln.ok === false ? "NOK" : "-"
+    return `${Number(ln.height_m).toFixed(2)} | ${status}`
+  }
 
-        ref_unit: x.refUnit ?? "",
-        ref_type: (x.refUnit ?? "").startsWith("S")
-          ? "Shovel"
-          : (x.refUnit ?? "").startsWith("B")
-            ? "Backhoe"
-            : "",
+  return {
+    inspection_id: x.id,
+    tanggal: date,
+    waktu: mode === "DAILY" ? time : "—",
+    inspector: x.inspector,
+    shift: shiftLabel(x.shift),
+    pelaksanaan: x.pelaksanaan,
+    front: x.front,
 
-        limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
-        max_height_m: x.maxHeightM,
+    ref_unit: x.refUnit ?? "",
+    ref_type: (x.refUnit ?? "").startsWith("S")
+      ? "Shovel"
+      : (x.refUnit ?? "").startsWith("B")
+        ? "Backhoe"
+        : "",
 
-        total_titik: x.linesCount,
-        titik_sesuai: x.linesOkCount,
-        compliance_pct: pctOk(x.linesOkCount, x.linesCount),
+    limit_m: x.refUnit ? getLimitM(x.refUnit) : "",
+    max_height_m: x.maxHeightM,
 
-        titik_A: pointCell("A"),
-        titik_B: pointCell("B"),
-        titik_C: pointCell("C"),
-        titik_D: pointCell("D"),
-        titik_E: pointCell("E"),
+    total_titik: x.linesCount,
+    titik_sesuai: titikSesuai,
+    compliance_pct: compliancePct,
 
-        review_status: x.reviewStatus,
-        reviewed_by: x.reviewedBy ?? "",
-        photo_url: photoUrl ?? "",
-      }
-    })
+    titik_A: pointCell("A"),
+    titik_B: pointCell("B"),
+    titik_C: pointCell("C"),
+    titik_D: pointCell("D"),
+    titik_E: pointCell("E"),
 
-    const wb = XLSX.utils.book_new()
+    review_status: x.reviewStatus,
+    reviewed_by: x.reviewedBy ?? "",
+    photo_url: photoUrl ?? "",
+  }
+})
 
-    const wsSummary = XLSX.utils.json_to_sheet(inspectionsSheet)
-    const wsLines = XLSX.utils.json_to_sheet(allLines)
-    const wsAnalyst = XLSX.utils.json_to_sheet(analystSheet)
+const wb = XLSX.utils.book_new()
+const wsAnalyst = XLSX.utils.json_to_sheet(analystSheet)
 
-    wsSummary["!cols"] = [
-      { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 10 },
-      { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
-      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
-      { wch: 18 }, { wch: 50 },
-    ]
+wsAnalyst["!cols"] = [
+  { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 10 },
+  { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+  { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+  { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+  { wch: 14 }, { wch: 16 }, { wch: 28 },
+]
 
-    wsLines["!cols"] = [
-      { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 16 },
-      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
-    ]
-
-    wsAnalyst["!cols"] = [
-      { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 10 },
-      { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
-      { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
-      { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
-      { wch: 14 }, { wch: 16 }, { wch: 28 },
-    ]
-
-    XLSX.utils.book_append_sheet(wb, wsSummary, "Inspections_Summary")
-    XLSX.utils.book_append_sheet(wb, wsLines, "Lines_Detail")
-    XLSX.utils.book_append_sheet(wb, wsAnalyst, "Analyst_View")
+XLSX.utils.book_append_sheet(wb, wsAnalyst, "Analyst_View")
 
     const period =
       mode === "DAILY"
@@ -1895,11 +1780,14 @@ export default function Dashboard() {
 const compliance = useMemo(() => {
   const total = inspections.reduce((s, x) => s + (x.linesCount ?? 0), 0)
 
-  const ok = inspections.reduce((s, x) => s + (x.linesOkCount ?? 0), 0)
+  const ok = inspections.reduce((s, x) => {
+    const isReviewed = x.reviewStatus !== "PENDING" && !!x.reviewedBy
+    return s + (isReviewed ? (x.linesOkCount ?? 0) : 0)
+  }, 0)
 
   const verified = inspections.reduce((s, x) => {
-    if (x.reviewStatus === "PENDING" || !x.reviewedBy) return s
-    return s + (x.linesCount ?? 0)
+    const isReviewed = x.reviewStatus !== "PENDING" && !!x.reviewedBy
+    return s + (isReviewed ? (x.linesCount ?? 0) : 0)
   }, 0)
 
   const bad = Math.max(0, verified - ok)
