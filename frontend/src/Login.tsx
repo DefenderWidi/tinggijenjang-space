@@ -139,7 +139,7 @@ saveBaseSession({
 
             <div className="hidden lg:flex flex-col justify-center lg:pl-14 xl:pl-20">
               <div className="max-w-lg">
-                <div className="mb-5 inline-flex items-center gap-3 rounded-3xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-xl">
+                <div className="mb-5 inline-flex items-center gap-3 rounded-3xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-2xl">
                   <img
                     src="/PT.-BUMA-Logo-Vector.svg-.png"
                     alt="PT BUMA Logo"
@@ -181,7 +181,7 @@ saveBaseSession({
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-                  className="relative w-full overflow-hidden rounded-3xl border border-white/20 bg-white/14 p-6 shadow-2xl backdrop-blur-xl"
+                  className="relative w-full overflow-hidden rounded-3xl border border-white/20 bg-white/14 p-6 shadow-2xl backdrop-blur-2xl"
                 >
                   <div className="pointer-events-none absolute inset-0">
                     <div className="absolute inset-0 bg-gradient-to-br from-white/12 via-transparent to-transparent" />
@@ -201,7 +201,7 @@ saveBaseSession({
                     </label>
                     <input
                       disabled={loading}
-                      className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none transition focus:border-buma-green/60 focus:ring-2 focus:ring-buma-green/25"
+                      className="mt-2 w-full rounded-xl border border-white/15 bg-white/15 px-3 py-2 text-sm text-white placeholder:text-white/60 outline-none transition focus:border-buma-green/60 focus:ring-2 focus:ring-buma-green/35"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       placeholder="Masukkan username"
@@ -215,7 +215,7 @@ saveBaseSession({
                       <input
                         disabled={loading}
                         type={showPass ? "text" : "password"}
-                        className="w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 pr-10 text-sm text-white placeholder:text-white/40 outline-none transition focus:border-buma-green/60 focus:ring-2 focus:ring-buma-green/25"
+                        className="w-full rounded-xl border border-white/15 bg-white/15 px-3 py-2 pr-10 text-sm text-white placeholder:text-white/60 outline-none transition focus:border-buma-green/60 focus:ring-2 focus:ring-buma-green/35"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         onKeyDown={(e) => {
