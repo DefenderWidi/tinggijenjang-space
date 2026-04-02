@@ -8,11 +8,15 @@ import { getLimitM } from "../config/reference"
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 const LS_KEY = "mt_session_v1"
 const AUTO_REFRESH_MS = 10000
+const DISPOSAL_LIMIT_M = 50
+const ROAD_LIMIT_M = 50
 
 type Shift = "DAY" | "NIGHT"
 type Pelaksanaan = "START" | "MID" | "END"
 type ReviewStatus = "PENDING" | "VALID"
 type TabKey = "PENDING" | "VALID" | "ALL"
+type InspectionType = "FRONT" | "DISPOSAL" | "ROAD"
+type TypeFilter = "ALL" | InspectionType
 
 type InspectionRow = {
   id: string
@@ -31,6 +35,7 @@ type InspectionRow = {
   ref_meter?: number | null
   ref_verify_ok?: boolean | null
   ref_verify_meter?: number | null
+  type: InspectionType
 }
 
 type MeasureRow = {
@@ -52,6 +57,8 @@ type MeasureRow = {
 }
 
 type LineItem = { label: string; heightM: number | null; ok?: boolean | null }
+
+const DISPOSAL_REF_UNITS = new Set(["D155", "D375", "HD789", "HD785", "HD777"])
 
 function getSession() {
   try {
@@ -112,6 +119,67 @@ function tabActiveClass(k: TabKey) {
     default:
       return "border-buma-border bg-gradient-to-r from-black/20 to-black/5 text-buma-text shadow-sm"
   }
+}
+
+function typeActiveClass(k: TypeFilter) {
+  switch (k) {
+    case "FRONT":
+      return "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue shadow-sm"
+    case "DISPOSAL":
+      return "border-buma-orange/30 bg-gradient-to-r from-buma-orange/15 to-buma-orange/5 text-buma-orange shadow-sm"
+    case "ROAD":
+      return "border-violet-400/30 bg-gradient-to-r from-violet-500/15 to-violet-500/5 text-violet-600 shadow-sm"
+    case "ALL":
+    default:
+      return "border-buma-border bg-gradient-to-r from-black/20 to-black/5 text-buma-text shadow-sm"
+  }
+}
+
+function inferInspectionType(x: any): InspectionType {
+  const rawType = String(x?.type ?? x?.inspection_type ?? x?.kind ?? "")
+    .trim()
+    .toUpperCase()
+
+  if (rawType === "FRONT" || rawType === "DISPOSAL" || rawType === "ROAD") {
+    return rawType
+  }
+
+  const refUnit = String(x?.ref_unit ?? "").trim().toUpperCase()
+  if (DISPOSAL_REF_UNITS.has(refUnit)) return "DISPOSAL"
+
+  const area = String(x?.front ?? "").trim().toLowerCase()
+  if (/\broad\b|\bjalan\b/.test(area)) return "ROAD"
+  if (/\bdisposal\b/.test(area)) return "DISPOSAL"
+
+  return "FRONT"
+}
+
+function typeLabel(t: InspectionType) {
+  if (t === "DISPOSAL") return "DISPOSAL"
+  if (t === "ROAD") return "ROAD"
+  return "FRONT"
+}
+
+function typePillClass(t: InspectionType) {
+  if (t === "DISPOSAL") {
+    return "border-buma-orange/30 bg-gradient-to-r from-buma-orange/15 to-buma-orange/5 text-buma-orange"
+  }
+  if (t === "ROAD") {
+    return "border-violet-400/30 bg-gradient-to-r from-violet-500/15 to-violet-500/5 text-violet-600"
+  }
+  return "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue"
+}
+
+function getStandardForInspection(type: InspectionType, refUnit?: string | null) {
+  if (type === "DISPOSAL") return DISPOSAL_LIMIT_M
+  if (type === "ROAD") return ROAD_LIMIT_M
+  return getLimitM(refUnit ?? null)
+}
+
+function isLineOkByType(type: InspectionType, heightM: number, refUnit?: string | null) {
+  if (type === "DISPOSAL") return heightM >= DISPOSAL_LIMIT_M
+  if (type === "ROAD") return heightM >= ROAD_LIMIT_M
+  return heightM <= getLimitM(refUnit ?? null)
 }
 
 // backend belum punya endpoint line-items? fallback label A,B,C...
@@ -234,14 +302,13 @@ export default function PjaDashboard() {
 
   const [q, setQ] = useState("")
   const [tab, setTab] = useState<"ALL" | ReviewStatus>("PENDING")
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL")
 
-  // modal state
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState<InspectionRow | null>(null)
   const [imgOpen, setImgOpen] = useState(false)
   const [notes, setNotes] = useState("")
 
-  // photo/measures state (lazy)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [measureMeta, setMeasureMeta] = useState<{
     ref_unit?: string | null
@@ -255,11 +322,9 @@ export default function PjaDashboard() {
   const [refVerify, setRefVerify] = useState<boolean | null>(null)
   const [refHeight, setRefHeight] = useState<string>("")
 
-  // lines + per-line verification
   const [lines, setLines] = useState<LineItem[]>([])
   const [lineVerify, setLineVerify] = useState<Record<string, boolean | null>>({})
 
-  // submit state (kirim verifikasi)
   type SubmitStatus = "idle" | "loading" | "success" | "error"
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>("idle")
   const [submitMsg, setSubmitMsg] = useState<string>("")
@@ -316,6 +381,7 @@ export default function PjaDashboard() {
           x.ref_verify_ok === true ? true : x.ref_verify_ok === false ? false : null,
         ref_verify_meter:
           x.ref_verify_meter != null ? Number(x.ref_verify_meter) : null,
+        type: inferInspectionType(x),
       }))
 
       setRows(mapped)
@@ -348,8 +414,21 @@ export default function PjaDashboard() {
   }, [autoRefresh, open, isSubmitting, isDeleting, submitStatus])
 
   const counts = useMemo(() => {
-    const c = { ALL: rows.length, PENDING: 0, VALID: 0}
+    const c = { ALL: rows.length, PENDING: 0, VALID: 0 }
     rows.forEach((x) => c[x.reviewStatus]++)
+    return c
+  }, [rows])
+
+  const typeCounts = useMemo(() => {
+    const c: Record<TypeFilter, number> = {
+      ALL: rows.length,
+      FRONT: 0,
+      DISPOSAL: 0,
+      ROAD: 0,
+    }
+    rows.forEach((x) => {
+      c[x.type]++
+    })
     return c
   }, [rows])
 
@@ -357,17 +436,20 @@ export default function PjaDashboard() {
     const query = q.trim().toLowerCase()
     return rows.filter((x) => {
       const okTab = tab === "ALL" ? true : x.reviewStatus === tab
+      const okType = typeFilter === "ALL" ? true : x.type === typeFilter
       const { date, time } = fmtDateTime(x.inspectedAt)
       const okQ =
         !query ||
         x.id.toLowerCase().includes(query) ||
         x.front.toLowerCase().includes(query) ||
         x.inspector.toLowerCase().includes(query) ||
+        x.type.toLowerCase().includes(query) ||
         date.toLowerCase().includes(query) ||
         time.toLowerCase().includes(query)
-      return okTab && okQ
+
+      return okTab && okType && okQ
     })
-  }, [rows, q, tab])
+  }, [rows, q, tab, typeFilter])
 
   function closeDetail() {
     setOpen(false)
@@ -391,44 +473,49 @@ export default function PjaDashboard() {
     setMeasureErr(null)
 
     try {
-      const r = await fetch(`${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}`, {
-        method: "GET",
-      })
+      const r = await fetch(
+        `${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}`,
+        { method: "GET" }
+      )
       if (!r.ok) throw new Error(await r.text())
 
       const j = await r.json()
       const data: MeasureRow[] = Array.isArray(j?.data) ? j.data : j?.data ? [j.data] : []
       const m: any = data[0]
 
-if (!m?.image_url) {
-  setPhotoUrl(null)
-  return null
-}
+      if (!m?.image_url) {
+        setPhotoUrl(null)
+        return null
+      }
 
       setPhotoUrl(String(m.image_url))
-setMeasureMeta((prev) => ({
-  ref_unit: m.ref_unit ?? prev?.ref_unit ?? null,
-  ref_meter: m.ref_meter ?? prev?.ref_meter ?? null,
-  pixel_per_meter: m.pixel_per_meter ?? prev?.pixel_per_meter ?? null,
-  orientation: m.orientation ?? prev?.orientation ?? null,
-}))
+      setMeasureMeta((prev) => ({
+        ref_unit: m.ref_unit ?? prev?.ref_unit ?? null,
+        ref_meter: m.ref_meter ?? prev?.ref_meter ?? null,
+        pixel_per_meter: m.pixel_per_meter ?? prev?.pixel_per_meter ?? null,
+        orientation: m.orientation ?? prev?.orientation ?? null,
+      }))
 
       const linesFromMeasure = parseLinesFromMeasure(m)
       return linesFromMeasure.length ? linesFromMeasure : null
     } catch (e: any) {
-setMeasureErr(e?.message ?? "Failed to load photo")
-setPhotoUrl(null)
-return null
+      setMeasureErr(e?.message ?? "Failed to load photo")
+      setPhotoUrl(null)
+      return null
     } finally {
       setMeasureLoading(false)
     }
   }
 
-  async function fetchLinesForInspection(inspectionId: string, fallbackCount: number): Promise<LineItem[]> {
+  async function fetchLinesForInspection(
+    inspectionId: string,
+    fallbackCount: number
+  ): Promise<LineItem[]> {
     try {
-      const r2 = await fetch(`${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(inspectionId)}`, {
-        method: "GET",
-      })
+      const r2 = await fetch(
+        `${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(inspectionId)}`,
+        { method: "GET" }
+      )
       if (r2.ok) {
         const j2 = await r2.json()
         const arr = Array.isArray(j2?.data) ? j2.data : []
@@ -452,50 +539,57 @@ return null
     }
   }
 
-async function openDetail(item: InspectionRow) {
-  setActive(item)
-  setOpen(true)
-  setNotes(item.reviewNotes ?? "")
+  async function openDetail(item: InspectionRow) {
+    setActive(item)
+    setOpen(true)
+    setNotes(item.reviewNotes ?? "")
 
-  setRefVerify(
-    item.ref_verify_ok === true ? true : item.ref_verify_ok === false ? false : null
-  )
+    setRefVerify(
+      item.ref_verify_ok === true ? true : item.ref_verify_ok === false ? false : null
+    )
 
-  setRefHeight(
-    item.ref_verify_meter != null
-      ? String(item.ref_verify_meter)
-      : item.ref_meter != null
-        ? String(item.ref_meter)
-        : ""
-  )
+    setRefHeight(
+      item.ref_verify_meter != null
+        ? String(item.ref_verify_meter)
+        : item.ref_meter != null
+          ? String(item.ref_meter)
+          : ""
+    )
 
-  setImgOpen(false)
+    setImgOpen(false)
 
-  setMeasureMeta({
-    ref_unit: item.ref_unit ?? null,
-    ref_meter: item.ref_meter ?? null,
-    pixel_per_meter: null,
-    orientation: null,
-  })
+    setMeasureMeta({
+      ref_unit: item.ref_unit ?? null,
+      ref_meter: item.ref_meter ?? null,
+      pixel_per_meter: null,
+      orientation: null,
+    })
 
-  const linesFromMeasure = await fetchLatestMeasure(item.id)
-  const loadedLines = linesFromMeasure ?? (await fetchLinesForInspection(item.id, item.linesCount))
+    const linesFromMeasure = await fetchLatestMeasure(item.id)
+    const loadedLines =
+      linesFromMeasure ?? (await fetchLinesForInspection(item.id, item.linesCount))
 
-  setLines(loadedLines)
+    setLines(loadedLines)
 
-  const init: Record<string, boolean | null> = {}
-  loadedLines.forEach((ln) => (init[ln.label] = ln.ok ?? null))
-  setLineVerify(init)
-}
+    const init: Record<string, boolean | null> = {}
+    loadedLines.forEach((ln) => (init[ln.label] = ln.ok ?? null))
+    setLineVerify(init)
+  }
 
   const allVerified = useMemo(() => {
     if (!lines.length) return false
-    return lines.every((ln) => lineVerify[ln.label] !== null && lineVerify[ln.label] !== undefined)
+    return lines.every(
+      (ln) => lineVerify[ln.label] !== null && lineVerify[ln.label] !== undefined
+    )
   }, [lines, lineVerify])
 
   const standardM = useMemo(() => {
-    return getLimitM(measureMeta?.ref_unit ?? active?.ref_unit ?? null)
-  }, [measureMeta?.ref_unit, active?.ref_unit])
+    if (!active) return getLimitM(measureMeta?.ref_unit ?? null)
+    return getStandardForInspection(
+      active.type,
+      measureMeta?.ref_unit ?? active.ref_unit ?? null
+    )
+  }, [active, measureMeta?.ref_unit])
 
   const refHeightNumber = useMemo(() => {
     const n = Number(refHeight)
@@ -538,7 +632,10 @@ async function openDetail(item: InspectionRow) {
       const payloadLines = lines.map((ln) => ({
         label: ln.label,
         height_m: ln.heightM as number,
-        ok: lineVerify[ln.label] ?? null,
+        ok:
+          ln.heightM == null
+            ? null
+            : lineVerify[ln.label] ?? isLineOkByType(active.type, ln.heightM, active.ref_unit),
       }))
 
       const rLines = await fetch(`${API_BASE}/api/inspection-lines`, {
@@ -586,7 +683,9 @@ async function openDetail(item: InspectionRow) {
       }, 2000)
     } catch (e: any) {
       setSubmitStatus("error")
-      setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi.")
+      setSubmitMsg(
+        e?.message ? String(e.message) : "Terjadi kendala. Silakan coba lagi."
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -597,7 +696,7 @@ async function openDetail(item: InspectionRow) {
     if (isDeleting) return
 
     const ok = window.confirm(
-      `Hapus inspeksi ini?\n\nID: ${active.id}\nInspector: ${active.inspector}\nFront: ${active.front}\n\nData yang terhapus tidak bisa dikembalikan.`
+      `Hapus inspeksi ini?\n\nID: ${active.id}\nInspector: ${active.inspector}\nArea: ${active.front}\n\nData yang terhapus tidak bisa dikembalikan.`
     )
     if (!ok) return
 
@@ -626,7 +725,9 @@ async function openDetail(item: InspectionRow) {
       }, 1200)
     } catch (e: any) {
       setSubmitStatus("error")
-      setSubmitMsg(e?.message ? String(e.message) : "Terjadi kendala saat menghapus data.")
+      setSubmitMsg(
+        e?.message ? String(e.message) : "Terjadi kendala saat menghapus data."
+      )
     } finally {
       setIsDeleting(false)
     }
@@ -666,17 +767,25 @@ async function openDetail(item: InspectionRow) {
       )}
 
       <div className="space-y-4">
-        {/* ===== HERO ===== */}
         <div className="relative overflow-hidden rounded-3xl border border-buma-border bg-white shadow-soft">
-          <div className="h-[150px] w-full bg-cover bg-center" style={{ backgroundImage: "url('/LoginBackground.jpeg')" }} />
+          <div
+            className="h-[150px] w-full bg-cover bg-center"
+            style={{ backgroundImage: "url('/LoginBackground.jpeg')" }}
+          />
           <div className="absolute inset-0 bg-black/50" />
 
           <div className="absolute inset-0 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-widest text-white/70">PJA Console</div>
-                <div className="mt-1 text-xl font-extrabold text-white">Dashboard Verifikasi Tinggi Jenjang</div>
-                <div className="mt-1 text-sm text-white/80">Menampilkan hasil submit inspector.</div>
+                <div className="text-xs font-semibold uppercase tracking-widest text-white/70">
+                  PJA Console
+                </div>
+                <div className="mt-1 text-xl font-extrabold text-white">
+                  Dashboard Verifikasi Tinggi Jenjang
+                </div>
+                <div className="mt-1 text-sm text-white/80">
+                  Menampilkan hasil submit inspector.
+                </div>
               </div>
 
               <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-right backdrop-blur">
@@ -696,9 +805,8 @@ async function openDetail(item: InspectionRow) {
           </div>
         </div>
 
-        {/* ===== FILTERS ===== */}
         <div className="rounded-3xl border border-buma-border bg-white/80 shadow-soft backdrop-blur">
-          <div className="p-4">
+          <div className="p-4 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <input
                 value={q}
@@ -720,7 +828,9 @@ async function openDetail(item: InspectionRow) {
                     onClick={() => setTab(k)}
                     className={cls(
                       "rounded-xl border px-3 py-2 text-xs font-extrabold transition",
-                      tab === k ? tabActiveClass(k) : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                      tab === k
+                        ? tabActiveClass(k)
+                        : "border-buma-border bg-white text-buma-text hover:bg-black/5"
                     )}
                     type="button"
                   >
@@ -760,12 +870,12 @@ async function openDetail(item: InspectionRow) {
                     />
                     <span
                       className="
-        relative h-5 w-9 rounded-full bg-slate-200 transition
-        peer-checked:bg-emerald-500/20
-        after:absolute after:left-[2px] after:top-[2px]
-        after:h-4 after:w-4 after:rounded-full after:bg-slate-500 after:shadow-sm after:transition
-        peer-checked:after:translate-x-4 peer-checked:after:bg-emerald-600
-      "
+                        relative h-5 w-9 rounded-full bg-slate-200 transition
+                        peer-checked:bg-emerald-500/20
+                        after:absolute after:left-[2px] after:top-[2px]
+                        after:h-4 after:w-4 after:rounded-full after:bg-slate-500 after:shadow-sm after:transition
+                        peer-checked:after:translate-x-4 peer-checked:after:bg-emerald-600
+                      "
                     />
                   </span>
                 </label>
@@ -777,21 +887,47 @@ async function openDetail(item: InspectionRow) {
                   className="inline-flex items-center gap-1.5 rounded-xl border border-buma-border bg-white px-3 py-2 text-xs font-extrabold text-buma-text transition hover:bg-black/5 disabled:opacity-60"
                   title="Refresh"
                 >
-                  <span className={cls("text-sm leading-none", isRefreshing && "animate-spin")}>↻</span>
+                  <span className={cls("text-sm leading-none", isRefreshing && "animate-spin")}>
+                    ↻
+                  </span>
                   {isRefreshing ? "Refreshing..." : "Refresh"}
                 </button>
               </div>
             </div>
 
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["ALL", `Semua ${typeCounts.ALL}`],
+                  ["FRONT", `Front ${typeCounts.FRONT}`],
+                  ["DISPOSAL", `Disposal ${typeCounts.DISPOSAL}`],
+                  ["ROAD", `Road ${typeCounts.ROAD}`],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setTypeFilter(k)}
+                  className={cls(
+                    "rounded-xl border px-3 py-2 text-xs font-extrabold transition",
+                    typeFilter === k
+                      ? typeActiveClass(k)
+                      : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                  )}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {loadErr ? (
-              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 Gagal load data: {loadErr}
               </div>
             ) : null}
           </div>
         </div>
 
-        {/* ===== TABLE ===== */}
         <div className="rounded-3xl border border-buma-border bg-white shadow-soft min-w-0">
           <div className="px-4 pt-4">
             <div className="flex items-start justify-between gap-3">
@@ -804,16 +940,13 @@ async function openDetail(item: InspectionRow) {
             </div>
           </div>
 
-          <div
-            className="mt-3 overflow-x-auto px-4 pb-2
-             [-webkit-overflow-scrolling:touch]
-             overscroll-x-contain"
-          >
-            <table className="w-full min-w-[980px] text-sm text-buma-text">
+          <div className="mt-3 overflow-x-auto px-4 pb-2 [-webkit-overflow-scrolling:touch] overscroll-x-contain">
+            <table className="w-full min-w-[1060px] text-sm text-buma-text">
               <thead>
                 <tr className="border-y border-buma-border text-left text-buma-muted">
                   <th className="px-4 py-3">Tanggal</th>
                   <th className="py-3">Waktu</th>
+                  <th className="py-3">Type</th>
                   <th className="py-3">Inspector</th>
                   <th className="py-3">Shift</th>
                   <th className="py-3">Pelaksanaan</th>
@@ -828,7 +961,7 @@ async function openDetail(item: InspectionRow) {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-4 py-8 text-center text-buma-muted" colSpan={10}>
+                    <td className="px-4 py-8 text-center text-buma-muted" colSpan={11}>
                       Loading…
                     </td>
                   </tr>
@@ -836,15 +969,33 @@ async function openDetail(item: InspectionRow) {
                   <>
                     {filtered.map((x) => {
                       const { date, time } = fmtDateTime(x.inspectedAt)
-                      const limitRow = getLimitM(x.ref_unit ?? null)
-                      const danger = x.maxHeightM > limitRow
+                      const limitRow = getStandardForInspection(x.type, x.ref_unit ?? null)
+                      const danger =
+                        x.type === "DISPOSAL" || x.type === "ROAD"
+                          ? x.maxHeightM < limitRow
+                          : x.maxHeightM > limitRow
+
                       return (
                         <tr key={x.id} className="border-b border-buma-border hover:bg-black/5">
                           <td className="px-4 py-3 font-semibold">{date}</td>
                           <td className="py-3 text-buma-muted">{time}</td>
+
+                          <td className="py-3">
+                            <span
+                              className={cls(
+                                "inline-flex rounded-full border px-2.5 py-1 text-[10px] font-extrabold tracking-widest",
+                                typePillClass(x.type)
+                              )}
+                            >
+                              {typeLabel(x.type)}
+                            </span>
+                          </td>
+
                           <td className="py-3">{x.inspector}</td>
                           <td className="py-3 text-buma-muted">{shiftLabel(x.shift)}</td>
-                          <td className="py-3 text-buma-muted">{pelaksanaanLabel(x.pelaksanaan)}</td>
+                          <td className="py-3 text-buma-muted">
+                            {pelaksanaanLabel(x.pelaksanaan)}
+                          </td>
                           <td className="py-3 text-buma-muted">{x.front}</td>
 
                           <td className="py-3">
@@ -867,7 +1018,12 @@ async function openDetail(item: InspectionRow) {
                           </td>
 
                           <td className="py-3">
-                            <span className={cls("inline-flex rounded-full border px-2.5 py-1 text-xs font-extrabold", pillReview(x.reviewStatus))}>
+                            <span
+                              className={cls(
+                                "inline-flex rounded-full border px-2.5 py-1 text-xs font-extrabold",
+                                pillReview(x.reviewStatus)
+                              )}
+                            >
                               {x.reviewStatus}
                             </span>
                           </td>
@@ -876,14 +1032,7 @@ async function openDetail(item: InspectionRow) {
                             <button
                               type="button"
                               onClick={() => void openDetail(x)}
-                              className="inline-flex items-center gap-1.5 rounded-xl
-                                border border-buma-border
-                                bg-gradient-to-r from-black/5 to-transparent
-                                px-3 py-2 text-xs font-extrabold text-buma-text
-                                shadow-sm transition-all duration-200
-                                hover:border-black/30
-                                hover:bg-gradient-to-r hover:from-black/8 hover:to-transparent
-                                hover:shadow-md"
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-buma-border bg-gradient-to-r from-black/5 to-transparent px-3 py-2 text-xs font-extrabold text-buma-text shadow-sm transition-all duration-200 hover:border-black/30 hover:bg-gradient-to-r hover:from-black/8 hover:to-transparent hover:shadow-md"
                               title="Lihat detail inspeksi untuk verifikasi"
                             >
                               <svg
@@ -907,7 +1056,7 @@ async function openDetail(item: InspectionRow) {
 
                     {filtered.length === 0 ? (
                       <tr>
-                        <td className="px-4 py-8 text-center text-buma-muted" colSpan={10}>
+                        <td className="px-4 py-8 text-center text-buma-muted" colSpan={11}>
                           Tidak ada data sesuai filter.
                         </td>
                       </tr>
@@ -924,7 +1073,6 @@ async function openDetail(item: InspectionRow) {
         </div>
       </div>
 
-      {/* ===== MODAL ===== */}
       {open && active ? (
         <div className="fixed inset-0 z-[9999]">
           <div className="absolute inset-0 bg-black/55" onClick={closeDetail} />
@@ -938,14 +1086,33 @@ async function openDetail(item: InspectionRow) {
                 "flex flex-col"
               )}
             >
-              {/* header */}
               <div className="sticky top-0 z-10 border-b border-buma-border bg-white/95 px-4 py-3 md:px-5 md:py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-extrabold text-buma-text">Detail Verifikasi — {active.id}</div>
-                    <div className="mt-1 text-xs text-buma-muted">
-                      {active.front} • {shiftLabel(active.shift)} • {pelaksanaanLabel(active.pelaksanaan)} •{" "}
-                      {fmtDateTime(active.inspectedAt).date} {fmtDateTime(active.inspectedAt).time} • {active.inspector}
+                    <div className="truncate text-sm font-extrabold text-buma-text">
+                      Detail Verifikasi — {active.id}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-buma-muted">
+                      <span>{active.front}</span>
+                      <span>•</span>
+                      <span>{shiftLabel(active.shift)}</span>
+                      <span>•</span>
+                      <span>{pelaksanaanLabel(active.pelaksanaan)}</span>
+                      <span>•</span>
+                      <span>
+                        {fmtDateTime(active.inspectedAt).date}{" "}
+                        {fmtDateTime(active.inspectedAt).time}
+                      </span>
+                      <span>•</span>
+                      <span>{active.inspector}</span>
+                      <span
+                        className={cls(
+                          "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold tracking-widest",
+                          typePillClass(active.type)
+                        )}
+                      >
+                        {typeLabel(active.type)}
+                      </span>
                     </div>
                   </div>
                   <button
@@ -958,10 +1125,8 @@ async function openDetail(item: InspectionRow) {
                 </div>
               </div>
 
-              {/* body */}
               <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]">
                 <div className={cls("grid gap-4 p-3 sm:p-4 md:p-5", "lg:grid-cols-[1.45fr_0.85fr]")}>
-                  {/* LEFT */}
                   <div className="space-y-3">
                     <button
                       type="button"
@@ -971,7 +1136,9 @@ async function openDetail(item: InspectionRow) {
                     >
                       <div className="relative w-full bg-white">
                         {measureLoading ? (
-                          <div className="grid h-[280px] place-items-center text-xs text-buma-muted">Loading foto overlay…</div>
+                          <div className="grid h-[280px] place-items-center text-xs text-buma-muted">
+                            Loading foto overlay…
+                          </div>
                         ) : (
                           <img
                             src={photoUrl ?? "/miningimage1.png"}
@@ -982,21 +1149,10 @@ async function openDetail(item: InspectionRow) {
                         )}
 
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/35 to-transparent p-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition">
-                          <span className="text-xs font-extrabold text-white/90">Klik untuk perbesar</span>
-                          <span
-                            className="
-                              inline-flex items-center justify-center
-                              h-8 w-8
-                              rounded-full
-                              border border-white/25
-                              bg-white/10
-                              text-white/90
-                              backdrop-blur
-                              shadow-sm
-                              transition
-                              group-hover:scale-105
-                            "
-                          >
+                          <span className="text-xs font-extrabold text-white/90">
+                            Klik untuk perbesar
+                          </span>
+                          <span className="inline-flex items-center justify-center h-8 w-8 rounded-full border border-white/25 bg-white/10 text-white/90 backdrop-blur shadow-sm transition group-hover:scale-105">
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
                               width="16"
@@ -1027,12 +1183,14 @@ async function openDetail(item: InspectionRow) {
                     ) : null}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <MetaCard k="Type" v={typeLabel(active.type)} />
                       <MetaCard k="Inspector" v={active.inspector} />
                       <MetaCard k="Shift" v={shiftLabel(active.shift)} />
                       <MetaCard k="Pelaksanaan" v={pelaksanaanLabel(active.pelaksanaan)} />
                       <MetaCard k="Front/Area" v={active.front} />
                       <MetaCard k="Max Height" v={`${active.maxHeightM.toFixed(2)} m`} />
                       <MetaCard k="Lines" v={`${active.linesCount}`} />
+                      <MetaCard k="Standar" v={`${standardM.toFixed(2)} m`} />
                     </div>
 
                     {measureMeta ? (
@@ -1040,10 +1198,17 @@ async function openDetail(item: InspectionRow) {
                         <div className="font-extrabold text-buma-text">Metadata Kalibrasi</div>
                         <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <MetaMini k="Ref Unit" v={measureMeta.ref_unit ?? "—"} />
-                          <MetaMini k="Ref Meter" v={measureMeta.ref_meter != null ? `${measureMeta.ref_meter}` : "—"} />
+                          <MetaMini
+                            k="Ref Meter"
+                            v={measureMeta.ref_meter != null ? `${measureMeta.ref_meter}` : "—"}
+                          />
                           <MetaMini
                             k="Px/m"
-                            v={measureMeta.pixel_per_meter != null ? `${measureMeta.pixel_per_meter}` : "—"}
+                            v={
+                              measureMeta.pixel_per_meter != null
+                                ? `${measureMeta.pixel_per_meter}`
+                                : "—"
+                            }
                           />
                           <MetaMini k="Orientation" v={measureMeta.orientation ?? "—"} />
                         </div>
@@ -1051,353 +1216,281 @@ async function openDetail(item: InspectionRow) {
                     ) : null}
                   </div>
 
-           {/* RIGHT */}
-<div className="space-y-3">
-{/* Card Verifikasi Unit Referensi */}
-<div
-  className="
-    relative rounded-3xl
-    border border-buma-border
-    bg-white
-    p-3 sm:p-4
-    shadow-soft
-    before:absolute before:inset-0 before:rounded-3xl
-    before:border before:border-black/5
-    before:pointer-events-none
-  "
->
-  <div>
-    <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
-      Verifikasi Unit Referensi
-    </div>
+                  <div className="space-y-3">
+                    <div className="relative rounded-3xl border border-buma-border bg-white p-3 sm:p-4 shadow-soft before:absolute before:inset-0 before:rounded-3xl before:border before:border-black/5 before:pointer-events-none">
+                      <div>
+                        <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+                          Verifikasi Unit Referensi
+                        </div>
 
-    <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
-      Pastikan unit referensi dan tinggi referensinya sudah benar.
-    </div>
-  </div>
+                        <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+                          Pastikan unit referensi dan tinggi referensinya sudah benar.
+                        </div>
+                      </div>
 
-  {/* REF UNIT + TINGGI REFERENSI (slim) */}
-  <div className="mt-3 overflow-hidden rounded-2xl border border-buma-border bg-gradient-to-r from-buma-bg to-white shadow-sm">
-    <div className="grid grid-cols-[118px_1fr] items-stretch">
-      {/* kiri */}
-      <div className="flex min-h-[68px] flex-col justify-center px-3 py-2.5">
-        <div className="text-[9px] uppercase tracking-[0.18em] text-buma-muted">
-          Ref Unit
-        </div>
-        <div className="mt-0.5 text-[15px] font-extrabold leading-none text-buma-text">
-          {measureMeta?.ref_unit ?? active?.ref_unit ?? "—"}
-        </div>
-      </div>
+                      <div className="mt-3 overflow-hidden rounded-2xl border border-buma-border bg-gradient-to-r from-buma-bg to-white shadow-sm">
+                        <div className="grid grid-cols-[118px_1fr] items-stretch">
+                          <div className="flex min-h-[68px] flex-col justify-center px-3 py-2.5">
+                            <div className="text-[9px] uppercase tracking-[0.18em] text-buma-muted">
+                              Ref Unit
+                            </div>
+                            <div className="mt-0.5 text-[15px] font-extrabold leading-none text-buma-text">
+                              {measureMeta?.ref_unit ?? active?.ref_unit ?? "—"}
+                            </div>
+                          </div>
 
-      {/* kanan */}
-      <div className="flex min-h-[68px] flex-col justify-center border-l border-buma-border/70 bg-white/60 px-3 py-2.5">
-        <label className="text-[9px] uppercase tracking-[0.18em] text-buma-muted">
-          Tinggi Referensi
-        </label>
+                          <div className="flex min-h-[68px] flex-col justify-center border-l border-buma-border/70 bg-white/60 px-3 py-2.5">
+                            <label className="text-[9px] uppercase tracking-[0.18em] text-buma-muted">
+                              Tinggi Referensi
+                            </label>
 
-        <div className="relative mt-0.5">
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={refHeight}
-            onChange={(e) => setRefHeight(e.target.value)}
-            placeholder="0.00"
-            className="
-              w-full border-0 bg-transparent
-              px-0 pr-6 py-0
-              text-[15px] font-extrabold leading-none text-buma-text
-              outline-none
-              placeholder:text-buma-muted/70
-            "
-          />
-          <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[11px] font-bold text-buma-muted">
-            m
-          </span>
-        </div>
-      </div>
-    </div>
-  </div>
+                            <div className="relative mt-0.5">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={refHeight}
+                                onChange={(e) => setRefHeight(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full border-0 bg-transparent px-0 pr-6 py-0 text-[15px] font-extrabold leading-none text-buma-text outline-none placeholder:text-buma-muted/70"
+                              />
+                              <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[11px] font-bold text-buma-muted">
+                                m
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
-  {/* BUTTON */}
-  <div className="mt-3 grid grid-cols-2 gap-2">
-    <button
-      type="button"
-      onClick={() => setRefVerify((prev) => (prev === true ? null : true))}
-      className={cls(
-        "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
-        refVerify === true
-          ? "border-buma-blue/40 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
-          : "border-buma-border bg-white text-buma-text hover:bg-black/5"
-      )}
-    >
-      <span
-        className={cls(
-          "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px]",
-          refVerify === true
-            ? "border-buma-blue/40 bg-buma-blue/10"
-            : "border-buma-border bg-buma-bg"
-        )}
-      >
-        {refVerify === true ? "✓" : ""}
-      </span>
-      Sesuai
-    </button>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRefVerify((prev) => (prev === true ? null : true))}
+                          className={cls(
+                            "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+                            refVerify === true
+                              ? "border-buma-blue/40 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                              : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                          )}
+                        >
+                          <span
+                            className={cls(
+                              "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px]",
+                              refVerify === true
+                                ? "border-buma-blue/40 bg-buma-blue/10"
+                                : "border-buma-border bg-buma-bg"
+                            )}
+                          >
+                            {refVerify === true ? "✓" : ""}
+                          </span>
+                          Sesuai
+                        </button>
 
-    <button
-      type="button"
-      onClick={() => setRefVerify((prev) => (prev === false ? null : false))}
-      className={cls(
-        "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
-        refVerify === false
-          ? "border-red-500/35 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
-          : "border-buma-border bg-white text-buma-text hover:bg-black/5"
-      )}
-    >
-      <span
-        className={cls(
-          "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px]",
-          refVerify === false
-            ? "border-red-500/35 bg-red-500/10"
-            : "border-buma-border bg-buma-bg"
-        )}
-      >
-        {refVerify === false ? "✓" : ""}
-      </span>
-      Tidak sesuai
-    </button>
-  </div>
+                        <button
+                          type="button"
+                          onClick={() => setRefVerify((prev) => (prev === false ? null : false))}
+                          className={cls(
+                            "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+                            refVerify === false
+                              ? "border-red-500/35 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+                              : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                          )}
+                        >
+                          <span
+                            className={cls(
+                              "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px]",
+                              refVerify === false
+                                ? "border-red-500/35 bg-red-500/10"
+                                : "border-buma-border bg-buma-bg"
+                            )}
+                          >
+                            {refVerify === false ? "✓" : ""}
+                          </span>
+                          Tidak sesuai
+                        </button>
+                      </div>
 
-  {/* STATUS */}
-  <div className="mt-3">
-    <span
-      className={cls(
-        "inline-flex rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
-        refVerify === null
-          ? "border-buma-border bg-white text-buma-muted"
-          : refVerify
-            ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
-            : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
-      )}
-    >
-      {refVerify === null
-        ? "BELUM DIVERIFIKASI"
-        : refVerify
-          ? "REFERENSI SESUAI"
-          : "REFERENSI TIDAK SESUAI"}
-    </span>
-  </div>
+                      <div className="mt-3">
+                        <span
+                          className={cls(
+                            "inline-flex rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
+                            refVerify === null
+                              ? "border-buma-border bg-white text-buma-muted"
+                              : refVerify
+                                ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                                : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+                          )}
+                        >
+                          {refVerify === null
+                            ? "BELUM DIVERIFIKASI"
+                            : refVerify
+                              ? "REFERENSI SESUAI"
+                              : "REFERENSI TIDAK SESUAI"}
+                        </span>
+                      </div>
 
-  <div className="mt-2 text-[10px] leading-relaxed text-buma-muted">
-    Klik opsi yang sama lagi untuk <b className="text-buma-text">membatalkan</b> pilihan.
-  </div>
-</div>
-
-  {/* Card Verifikasi Tiap Titik */}
-  <div
-    className="
-      relative rounded-3xl
-      border border-buma-border
-      bg-white
-      p-3 sm:p-4
-      shadow-soft
-      before:absolute before:inset-0 before:rounded-3xl
-      before:border before:border-black/5
-      before:pointer-events-none
-    "
-  >
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
-          Verifikasi Tiap Titik
-        </div>
-        <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
-          Pilih status tiap titik (A/B/C/…).
-        </div>
-      </div>
-
-      <div
-        className="
-          shrink-0 rounded-xl
-          border border-buma-border/70
-          bg-gradient-to-r from-buma-bg to-white
-          px-3 py-1.5
-          text-[11px] font-extrabold text-buma-muted
-          shadow-sm
-        "
-      >
-        Limit {standardM.toFixed(1)} m
-      </div>
-    </div>
-
-    <div className="mt-3 space-y-2.5">
-      {lines.map((ln) => {
-        const v = lineVerify[ln.label] ?? null
-
-        const toggleVal = (next: boolean) => {
-          setLineVerify((prev) => {
-            const cur = prev[ln.label]
-            return { ...prev, [ln.label]: cur === next ? null : next }
-          })
-        }
-
-        return (
-          <div
-            key={ln.label}
-            className="
-              relative rounded-2xl
-              border border-buma-border
-              bg-gradient-to-b from-buma-bg to-white
-              p-2.5 sm:p-3
-              shadow-sm
-              before:absolute before:inset-0 before:rounded-2xl
-              before:border before:border-black/5
-              before:pointer-events-none
-            "
-          >
-            <div className="rounded-xl border border-buma-border/80 bg-white p-2.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-semibold leading-none text-buma-muted">
-                      titik
-                    </span>
-
-                    <span
-                      className="
-                        relative mt-1 inline-flex h-10 w-10
-                        items-center justify-center
-                        rounded-xl border border-buma-border
-                        bg-gradient-to-b from-white to-buma-bg
-                        text-sm font-extrabold text-buma-text
-                        shadow-sm
-                      "
-                    >
-                      <span className="absolute inset-1 rounded-lg bg-white/40" />
-                      <span className="relative">{ln.label}</span>
-                    </span>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="text-[10px] uppercase tracking-widest text-buma-muted">
-                      Tinggi
+                      <div className="mt-2 text-[10px] leading-relaxed text-buma-muted">
+                        Klik opsi yang sama lagi untuk <b className="text-buma-text">membatalkan</b>{" "}
+                        pilihan.
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-[14px] font-extrabold text-buma-text tabular-nums">
-                      {ln.heightM == null ? "—" : `${ln.heightM.toFixed(2)} m`}
+
+                    <div className="relative rounded-3xl border border-buma-border bg-white p-3 sm:p-4 shadow-soft before:absolute before:inset-0 before:rounded-3xl before:border before:border-black/5 before:pointer-events-none">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+                            Verifikasi Tiap Titik
+                          </div>
+                          <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+                            Pilih status tiap titik (A/B/C/…).
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 rounded-xl border border-buma-border/70 bg-gradient-to-r from-buma-bg to-white px-3 py-1.5 text-[11px] font-extrabold text-buma-muted shadow-sm">
+                          Limit {standardM.toFixed(1)} m
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-2.5">
+                        {lines.map((ln) => {
+                          const v = lineVerify[ln.label] ?? null
+
+                          const toggleVal = (next: boolean) => {
+                            setLineVerify((prev) => {
+                              const cur = prev[ln.label]
+                              return { ...prev, [ln.label]: cur === next ? null : next }
+                            })
+                          }
+
+                          return (
+                            <div
+                              key={ln.label}
+                              className="relative rounded-2xl border border-buma-border bg-gradient-to-b from-buma-bg to-white p-2.5 sm:p-3 shadow-sm before:absolute before:inset-0 before:rounded-2xl before:border before:border-black/5 before:pointer-events-none"
+                            >
+                              <div className="rounded-xl border border-buma-border/80 bg-white p-2.5">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="flex flex-col items-center">
+                                      <span className="text-[10px] font-semibold leading-none text-buma-muted">
+                                        titik
+                                      </span>
+
+                                      <span className="relative mt-1 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-buma-border bg-gradient-to-b from-white to-buma-bg text-sm font-extrabold text-buma-text shadow-sm">
+                                        <span className="absolute inset-1 rounded-lg bg-white/40" />
+                                        <span className="relative">{ln.label}</span>
+                                      </span>
+                                    </div>
+
+                                    <div className="min-w-0">
+                                      <div className="text-[10px] uppercase tracking-widest text-buma-muted">
+                                        Tinggi
+                                      </div>
+                                      <div className="mt-0.5 text-[14px] font-extrabold text-buma-text tabular-nums">
+                                        {ln.heightM == null ? "—" : `${ln.heightM.toFixed(2)} m`}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <span
+                                    className={cls(
+                                      "shrink-0 rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
+                                      v === null
+                                        ? "border-buma-border bg-white text-buma-muted"
+                                        : v
+                                          ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                                          : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+                                    )}
+                                  >
+                                    {v === null ? "BELUM" : v ? "SESUAI" : "TIDAK SESUAI"}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="mt-2.5 rounded-xl border border-buma-border/80 bg-white p-2.5">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleVal(true)}
+                                    className={cls(
+                                      "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+                                      v === true
+                                        ? "border-buma-blue/40 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                                        : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                                    )}
+                                    aria-pressed={v === true}
+                                  >
+                                    <span
+                                      className={cls(
+                                        "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px] leading-none",
+                                        v === true
+                                          ? "border-buma-blue/40 bg-buma-blue/10"
+                                          : "border-buma-border bg-buma-bg"
+                                      )}
+                                    >
+                                      {v === true ? "✓" : ""}
+                                    </span>
+                                    Sesuai
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleVal(false)}
+                                    className={cls(
+                                      "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+                                      v === false
+                                        ? "border-red-500/35 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+                                        : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                                    )}
+                                    aria-pressed={v === false}
+                                  >
+                                    <span
+                                      className={cls(
+                                        "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px] leading-none",
+                                        v === false
+                                          ? "border-red-500/35 bg-red-500/10"
+                                          : "border-buma-border bg-buma-bg"
+                                      )}
+                                    >
+                                      {v === false ? "✓" : ""}
+                                    </span>
+                                    Tidak sesuai
+                                  </button>
+                                </div>
+
+                                <div className="mt-2 text-[10px] leading-relaxed text-buma-muted">
+                                  Klik opsi yang sama sekali lagi untuk{" "}
+                                  <b className="text-buma-text">membatalkan</b> pilihan.
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="relative rounded-3xl border border-buma-border bg-white p-3 sm:p-4 shadow-soft before:absolute before:inset-0 before:rounded-3xl before:border before:border-black/5 before:pointer-events-none">
+                      <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+                        Catatan
+                      </div>
+                      <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+                        Opsional.
+                      </div>
+
+                      <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Tulis catatan untuk inspeksi ini…"
+                        className="mt-3 w-full resize-none rounded-2xl border border-buma-border bg-gradient-to-b from-buma-bg to-white px-3 py-2.5 text-sm text-buma-text placeholder:text-buma-muted outline-none transition focus:border-buma-blue/50"
+                        rows={4}
+                      />
+                      <div className="mt-1 text-right text-[11px] text-buma-muted">
+                        {notes.length}/1000
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                <span
-                  className={cls(
-                    "shrink-0 rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
-                    v === null
-                      ? "border-buma-border bg-white text-buma-muted"
-                      : v
-                        ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
-                        : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
-                  )}
-                >
-                  {v === null ? "BELUM" : v ? "SESUAI" : "TIDAK SESUAI"}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-2.5 rounded-xl border border-buma-border/80 bg-white p-2.5">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => toggleVal(true)}
-                  className={cls(
-                    "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
-                    v === true
-                      ? "border-buma-blue/40 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
-                      : "border-buma-border bg-white text-buma-text hover:bg-black/5"
-                  )}
-                  aria-pressed={v === true}
-                >
-                  <span
-                    className={cls(
-                      "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px] leading-none",
-                      v === true
-                        ? "border-buma-blue/40 bg-buma-blue/10"
-                        : "border-buma-border bg-buma-bg"
-                    )}
-                  >
-                    {v === true ? "✓" : ""}
-                  </span>
-                  Sesuai
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => toggleVal(false)}
-                  className={cls(
-                    "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
-                    v === false
-                      ? "border-red-500/35 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
-                      : "border-buma-border bg-white text-buma-text hover:bg-black/5"
-                  )}
-                  aria-pressed={v === false}
-                >
-                  <span
-                    className={cls(
-                      "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px] leading-none",
-                      v === false
-                        ? "border-red-500/35 bg-red-500/10"
-                        : "border-buma-border bg-buma-bg"
-                    )}
-                  >
-                    {v === false ? "✓" : ""}
-                  </span>
-                  Tidak sesuai
-                </button>
               </div>
 
-              <div className="mt-2 text-[10px] leading-relaxed text-buma-muted">
-                Klik opsi yang sama sekali lagi untuk <b className="text-buma-text">membatalkan</b> pilihan.
-              </div>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  </div>
-
-  {/* Card Catatan */}
-  <div
-    className="
-      relative rounded-3xl
-      border border-buma-border
-      bg-white
-      p-3 sm:p-4
-      shadow-soft
-      before:absolute before:inset-0 before:rounded-3xl
-      before:border before:border-black/5
-      before:pointer-events-none
-    "
-  >
-    <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
-      Catatan
-    </div>
-    <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
-      Opsional.
-    </div>
-
-    <textarea
-      value={notes}
-      onChange={(e) => setNotes(e.target.value)}
-      placeholder="Tulis catatan untuk inspeksi ini…"
-      className="mt-3 w-full resize-none rounded-2xl border border-buma-border bg-gradient-to-b from-buma-bg to-white px-3 py-2.5 text-sm text-buma-text placeholder:text-buma-muted outline-none transition focus:border-buma-blue/50"
-      rows={4}
-    />
-    <div className="mt-1 text-right text-[11px] text-buma-muted">
-      {notes.length}/1000
-    </div>
-  </div>
-</div>
-</div>
-</div>
               <div className="sticky bottom-0 z-10 border-t border-buma-border bg-white/95 px-4 py-3 md:px-5">
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   <button
@@ -1437,7 +1530,8 @@ async function openDetail(item: InspectionRow) {
 
                 {!canSubmit ? (
                   <div className="mt-2 text-xs text-buma-muted">
-                    * Wajib verifikasi <b className="text-buma-text">unit referensi</b> dan semua titik sebelum kirim.
+                    * Wajib verifikasi <b className="text-buma-text">unit referensi</b> dan semua
+                    titik sebelum kirim.
                   </div>
                 ) : null}
               </div>
@@ -1450,7 +1544,9 @@ async function openDetail(item: InspectionRow) {
               <div className="absolute inset-0 flex items-center justify-center p-3 md:p-6">
                 <div className="relative w-full max-w-[1100px] overflow-hidden rounded-3xl border border-white/15 bg-black/40 backdrop-blur">
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                    <div className="text-sm font-extrabold text-white/90">Preview Foto Overlay</div>
+                    <div className="text-sm font-extrabold text-white/90">
+                      Preview Foto Overlay
+                    </div>
                     <button
                       type="button"
                       onClick={() => setImgOpen(false)}

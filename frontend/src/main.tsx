@@ -6,12 +6,13 @@ import "./index.css"
 import Login from "./Login"
 import SelectRole from "./SelectRole"
 import Measure from "./pages/Measure"
+import MeasureDisposal from "./pages/MeasureDisposal"
+import MeasureRoad from "./pages/MeasureRoad"
 import PjaDashboard from "./pages/PjaDashboard"
 import EvaluatorDashboard from "./pages/Dashboard"
 import Admin from "./pages/Admin"
-import MeasureRoad from "./pages/TrialMeasureRoad"
 
-type ActiveRole = "FIELD" | "PJA" | "EVALUATOR"
+type ActiveRole = "FRONT" | "DISPOSAL" | "ROAD" | "PJA" | "EVALUATOR"
 type AccountRole = "USER" | "ADMIN"
 type OperationalAccess = "NONE" | "FIELD" | "PJA"
 
@@ -26,7 +27,6 @@ type Session = {
   ts?: number
 }
 
-/** session boleh belum punya activeRole */
 function getSession(): Session | null {
   try {
     const raw = localStorage.getItem(LS_KEY)
@@ -40,7 +40,13 @@ function getSession(): Session | null {
 }
 
 function isValidRole(role: any): role is ActiveRole {
-  return role === "FIELD" || role === "PJA" || role === "EVALUATOR"
+  return (
+    role === "FRONT" ||
+    role === "DISPOSAL" ||
+    role === "ROAD" ||
+    role === "PJA" ||
+    role === "EVALUATOR"
+  )
 }
 
 function canAccessRole(session: Session, role: ActiveRole) {
@@ -49,7 +55,8 @@ function canAccessRole(session: Session, role: ActiveRole) {
 
   if (isAdmin) return true
 
-  if (role === "FIELD") {
+  // FRONT, DISPOSAL, ROAD = turunan FIELD
+  if (role === "FRONT" || role === "DISPOSAL" || role === "ROAD") {
     return access === "FIELD" || access === "PJA"
   }
 
@@ -66,11 +73,12 @@ function canAccessRole(session: Session, role: ActiveRole) {
 
 function defaultRouteForSession(session: Session) {
   const isAdmin = session.accountRole === "ADMIN"
-  const access = session.operationalAccess ?? "NONE"
 
   if (isAdmin) {
     if (isValidRole(session.activeRole)) {
-      if (session.activeRole === "FIELD") return "/measure"
+      if (session.activeRole === "FRONT") return "/measure"
+      if (session.activeRole === "DISPOSAL") return "/measure-disposal"
+      if (session.activeRole === "ROAD") return "/measure-road"
       if (session.activeRole === "PJA") return "/pja"
       if (session.activeRole === "EVALUATOR") return "/app"
     }
@@ -78,25 +86,21 @@ function defaultRouteForSession(session: Session) {
   }
 
   if (isValidRole(session.activeRole) && canAccessRole(session, session.activeRole)) {
-    if (session.activeRole === "FIELD") return "/measure"
+    if (session.activeRole === "FRONT") return "/measure"
+    if (session.activeRole === "DISPOSAL") return "/measure-disposal"
+    if (session.activeRole === "ROAD") return "/measure-road"
     if (session.activeRole === "PJA") return "/pja"
   }
 
-  if (access === "FIELD" || access === "PJA" || access === "NONE") {
-    return "/select-role"
-  }
-
-  return "/login"
+  return "/select-role"
 }
 
-/** cukup sudah login */
 function RequireBaseAuth({ children }: { children: React.ReactNode }) {
   const s = getSession()
   if (!s) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
-/** butuh login + activeRole valid + akses sesuai session */
 function RequireRoles({
   roles,
   children,
@@ -122,7 +126,6 @@ function RequireRoles({
   return <>{children}</>
 }
 
-/** khusus admin only */
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const s = getSession()
   if (!s) return <Navigate to="/login" replace />
@@ -136,7 +139,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/internal/measure-road" element={<MeasureRoad />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<Login />} />
@@ -150,11 +152,32 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
+        {/* FRONT */}
         <Route
           path="/measure"
           element={
-            <RequireRoles roles={["FIELD"]}>
+            <RequireRoles roles={["FRONT"]}>
               <Measure />
+            </RequireRoles>
+          }
+        />
+
+        {/* DISPOSAL */}
+        <Route
+          path="/measure-disposal"
+          element={
+            <RequireRoles roles={["DISPOSAL"]}>
+              <MeasureDisposal />
+            </RequireRoles>
+          }
+        />
+
+        {/* ROAD */}
+        <Route
+          path="/measure-road"
+          element={
+            <RequireRoles roles={["ROAD"]}>
+              <MeasureRoad />
             </RequireRoles>
           }
         />

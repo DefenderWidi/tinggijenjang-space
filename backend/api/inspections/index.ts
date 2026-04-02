@@ -27,6 +27,20 @@ function parseBody(req: VercelRequest): Record<string, any> | null {
   return {}
 }
 
+function toUpperOrNull(v: unknown): string | null {
+  const s = String(v ?? "").trim()
+  return s ? s.toUpperCase() : null
+}
+
+function pickFirstNonEmpty(...values: unknown[]) {
+  for (const v of values) {
+    if (v == null) continue
+    const s = String(v).trim()
+    if (s !== "") return v
+  }
+  return null
+}
+
 type Shift = "DAY" | "NIGHT"
 type ReviewStatus = "PENDING" | "VALID" | "REJECT"
 
@@ -39,7 +53,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // GET /api/inspections
     // =========================
     if (req.method === "GET") {
-      // 1) ambil inspections
       const { data: inspections, error: e1 } = await supabaseAdmin
         .from("inspections")
         .select("*")
@@ -51,37 +64,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rows = inspections ?? []
       if (!rows.length) return res.status(200).json({ data: [] })
 
-      // 2) ambil measures utk semua inspection_id (urut desc, lalu ambil pertama per id)
       const ids = rows.map((r: any) => r.id).filter(Boolean)
 
+      // AMAN: ambil semua kolom, jangan sebut nama kolom mode satu-satu
       const { data: measures, error: e2 } = await supabaseAdmin
-        .from("inspection_measures") // ✅ FIX: sesuai schema
-        .select("inspection_id, ref_unit, ref_meter, created_at")
+        .from("inspection_measures")
+        .select("*")
         .in("inspection_id", ids)
         .order("created_at", { ascending: false })
-        .limit(2000) // ✅ guard: biar nggak kebablasan kalau measure banyak
+        .limit(2000)
 
       if (e2) {
-        // kalau measures error, tetep balikin inspections (dashboard tetap jalan)
         console.error("api/inspections measures lookup error:", e2)
         return res.status(200).json({ data: rows })
       }
 
-      // 3) map latest measure per inspection_id
+      // latest measure per inspection_id
       const latestByInspection = new Map<string, any>()
       for (const m of measures ?? []) {
         const k = String((m as any).inspection_id ?? "")
         if (!k) continue
-        if (!latestByInspection.has(k)) latestByInspection.set(k, m) // karena sudah order desc
+        if (!latestByInspection.has(k)) {
+          latestByInspection.set(k, m)
+        }
       }
 
-      // 4) merge: tambahin ref_unit/ref_meter ke setiap inspection row
       const merged = rows.map((r: any) => {
-        const m = latestByInspection.get(String(r.id))
+        const m = latestByInspection.get(String(r.id)) ?? {}
+
+        // baca mode secara fleksibel dari berbagai kemungkinan nama kolom
+        const mergedInspectionMode = pickFirstNonEmpty(
+          r?.inspection_mode,
+          r?.inspectionMode,
+          m?.inspection_mode,
+          m?.inspectionMode,
+          m?.mode,
+          m?.inspection_type,
+          m?.inspectionType,
+          m?.category,
+          m?.type
+        )
+
+        const mergedMeasureMode = pickFirstNonEmpty(
+          r?.measure_mode,
+          r?.measureMode,
+          m?.measure_mode,
+          m?.measureMode,
+          m?.mode,
+          m?.measure_type,
+          m?.measureType,
+          m?.category,
+          m?.type
+        )
+
+        const mergedDashboardView = pickFirstNonEmpty(
+          r?.dashboard_view,
+          r?.dashboardView,
+          m?.dashboard_view,
+          m?.dashboardView,
+          mergedInspectionMode,
+          mergedMeasureMode
+        )
+
         return {
           ...r,
-          ref_unit: m?.ref_unit ?? null,
-          ref_meter: m?.ref_meter ?? null,
+          ref_unit: pickFirstNonEmpty(r?.ref_unit, r?.refUnit, m?.ref_unit, m?.refUnit),
+          ref_meter: pickFirstNonEmpty(r?.ref_meter, r?.refMeter, m?.ref_meter, m?.refMeter),
+          dashboard_view: mergedDashboardView,
+          measure_mode: mergedMeasureMode,
+          inspection_mode: mergedInspectionMode,
         }
       })
 
@@ -95,13 +146,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parseBody(req)
       if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
 
-      const shift: Shift | null = body?.shift === "DAY" || body?.shift === "NIGHT" ? body.shift : null
+      const shift: Shift | null =
+        body?.shift === "DAY" || body?.shift === "NIGHT" ? body.shift : null
 
       const review_status: ReviewStatus =
-        body?.review_status === "VALID" || body?.review_status === "REJECT" || body?.review_status === "PENDING"
+        body?.review_status === "VALID" ||
+        body?.review_status === "REJECT" ||
+        body?.review_status === "PENDING"
           ? body.review_status
           : "PENDING"
 
+      // tetap pakai payload aman sesuai schema inspections yang sudah pasti ada
       const payload = {
         inspector: String(body?.inspector ?? "").trim(),
         shift,
@@ -121,10 +176,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       }
 
-      const { data, error } = await supabaseAdmin.from("inspections").insert(payload).select("*").single()
+      const { data, error } = await supabaseAdmin
+        .from("inspections")
+        .insert(payload)
+        .select("*")
+        .single()
+
       if (error) return res.status(500).json({ error: error.message })
 
-      return res.status(201).json({ data })
+      return res.status(201).json({
+        data: {
+          ...data,
+          dashboard_view: toUpperOrNull(body?.dashboard_view),
+          measure_mode: toUpperOrNull(body?.measure_mode),
+          inspection_mode: toUpperOrNull(body?.inspection_mode),
+        },
+      })
     }
 
     return res.status(405).json({ error: "Method not allowed" })
