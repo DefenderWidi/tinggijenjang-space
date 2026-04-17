@@ -122,6 +122,30 @@ type Shift = "DAY" | "NIGHT"
 
 type BadgeRect = { x: number; y: number; w: number; h: number }
 
+const FRONT_OPTIONS = [
+  "B3610",
+  "B3608",
+  "B3606",
+  "B3605",
+  "S3604",
+  "S3603",
+  "S3602",
+  "S3601",
+  "S4006",
+  "S4004",
+  "B2510",
+  "S2503",
+  "S2501",
+  "B2048",
+  "B2045",
+  "B2042",
+  "B2040",
+  "B2036",
+  "B2020",
+  "B2019",
+  "B2012",
+] as const
+
 export default function Measure() {
   // ======= Refs =======
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -969,23 +993,31 @@ function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
                 />
               </div>
 
-              <div className="grid gap-1">
-                <label className="text-[11px] font-semibold text-buma-muted">
-                  Area / Front <span className="text-buma-orange">*</span>
-                </label>
-                <input
-                  value={areaId}
-                  onChange={(e) => {
-                    setAreaId(e.target.value)
-                    setFormError(false)
-                  }}
-                  placeholder="Contoh: 3604"
-                  className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition ${formError && !areaId
-                    ? "border-red-500"
-                    : "border-buma-border focus:border-buma-green/60"
-                    } bg-white`}
-                />
-              </div>
+             <div className="grid gap-1">
+  <label className="text-[11px] font-semibold text-buma-muted">
+    Area / Front <span className="text-buma-orange">*</span>
+  </label>
+
+  <select
+    value={areaId}
+    onChange={(e) => {
+      setAreaId(e.target.value)
+      setFormError(false)
+    }}
+    className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${
+      formError && !areaId
+        ? "border-red-500"
+        : "border-buma-border focus:border-buma-green/60"
+    }`}
+  >
+    <option value="">— Pilih area / front —</option>
+    {FRONT_OPTIONS.map((front) => (
+      <option key={front} value={front}>
+        {front}
+      </option>
+    ))}
+  </select>
+</div>
 
               {/* NEW: Shift DAY/NIGHT */}
               <div className="grid gap-1">
