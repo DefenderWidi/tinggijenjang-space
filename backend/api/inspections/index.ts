@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from("inspections")
         .select("*")
         .order("inspected_at", { ascending: false })
-        .limit(200)
+        .limit(5000)
 
       if (e1) return res.status(500).json({ error: e1.message })
 
