@@ -489,12 +489,21 @@ export default function PjaDashboard() {
       }
 
       setPhotoUrl(String(m.image_url))
+
+      const nextRefMeter =
+        m?.ref_meter != null && Number.isFinite(Number(m.ref_meter))
+          ? Number(m.ref_meter)
+          : null
+
       setMeasureMeta((prev) => ({
         ref_unit: m.ref_unit ?? prev?.ref_unit ?? null,
-        ref_meter: m.ref_meter ?? prev?.ref_meter ?? null,
+        ref_meter: nextRefMeter ?? prev?.ref_meter ?? null,
         pixel_per_meter: m.pixel_per_meter ?? prev?.pixel_per_meter ?? null,
         orientation: m.orientation ?? prev?.orientation ?? null,
       }))
+
+      // Tinggi Referensi harus sama persis dengan Metadata Kalibrasi > Ref Meter
+      setRefHeight(nextRefMeter != null ? String(nextRefMeter) : "")
 
       const linesFromMeasure = parseLinesFromMeasure(m)
       return linesFromMeasure.length ? linesFromMeasure : null
@@ -548,13 +557,7 @@ export default function PjaDashboard() {
       item.ref_verify_ok === true ? true : item.ref_verify_ok === false ? false : null
     )
 
-    setRefHeight(
-      item.ref_verify_meter != null
-        ? String(item.ref_verify_meter)
-        : item.ref_meter != null
-          ? String(item.ref_meter)
-          : ""
-    )
+    setRefHeight("")
 
     setImgOpen(false)
 
@@ -1246,13 +1249,11 @@ export default function PjaDashboard() {
 
                             <div className="relative mt-0.5">
                               <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={refHeight}
-                                onChange={(e) => setRefHeight(e.target.value)}
-                                placeholder="0.00"
-                                className="w-full border-0 bg-transparent px-0 pr-6 py-0 text-[15px] font-extrabold leading-none text-buma-text outline-none placeholder:text-buma-muted/70"
+                                type="text"
+                                value={refHeightNumber != null ? refHeightNumber.toFixed(2) : "—"}
+                                readOnly
+                                tabIndex={-1}
+                                className="w-full border-0 bg-transparent px-0 pr-6 py-0 text-[15px] font-extrabold leading-none text-buma-text outline-none"
                               />
                               <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[11px] font-bold text-buma-muted">
                                 m
