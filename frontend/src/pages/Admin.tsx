@@ -51,6 +51,7 @@ function formatDateLabel(value?: string) {
   if (!value) return "-"
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return value
+
   return d.toLocaleString("id-ID", {
     year: "numeric",
     month: "short",
@@ -58,6 +59,112 @@ function formatDateLabel(value?: string) {
     hour: "2-digit",
     minute: "2-digit",
   })
+}
+
+function formatNumber(value?: number | null) {
+  if (typeof value !== "number") return "0"
+  return new Intl.NumberFormat("id-ID").format(value)
+}
+
+async function readJsonSafe(res: Response) {
+  try {
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+function Spinner({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
+    />
+  )
+}
+
+function PageLoading() {
+  return (
+    <AppLayout hideTopbar>
+      <div className="mx-auto flex min-h-[70vh] w-full max-w-6xl items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-md rounded-[30px] border border-slate-200 bg-white px-6 py-8 text-center shadow-[0_24px_70px_rgba(15,23,42,0.10)]">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+            <Spinner className="h-9 w-9 border-[4px]" />
+          </div>
+
+          <div className="mt-5 text-lg font-black tracking-tight text-slate-900">
+            Memuat Admin Workspace
+          </div>
+
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Sedang memeriksa akses admin dan menyiapkan dashboard.
+          </p>
+        </div>
+      </div>
+    </AppLayout>
+  )
+}
+
+function StatSkeleton() {
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm">
+      <div className="h-3 w-28 animate-pulse rounded-full bg-slate-200" />
+      <div className="mt-4 h-9 w-20 animate-pulse rounded-2xl bg-slate-200" />
+      <div className="mt-3 h-3 w-36 animate-pulse rounded-full bg-slate-100" />
+    </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  helper,
+  loading,
+}: {
+  label: string
+  value?: number | null
+  helper?: string
+  loading?: boolean
+}) {
+  if (loading) return <StatSkeleton />
+
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm">
+      <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+
+      <div className="mt-3 text-3xl font-black text-slate-900">
+        {formatNumber(value ?? 0)}
+      </div>
+
+      {helper ? (
+        <div className="mt-2 break-all text-xs font-semibold text-slate-500">
+          {helper}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function UserListSkeleton() {
+  return (
+    <div className="space-y-3 p-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div
+          key={index}
+          className="rounded-2xl border border-slate-200 bg-white p-4"
+        >
+          <div className="h-4 w-36 animate-pulse rounded-full bg-slate-200" />
+          <div className="mt-3 h-3 w-56 animate-pulse rounded-full bg-slate-100" />
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+            <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+            <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function Admin() {
@@ -68,10 +175,17 @@ export default function Admin() {
   const accountRole = session?.accountRole
   const isAdminAccount = accountRole === "ADMIN"
 
-  const [pageLoading, setPageLoading] = useState(true)
+  const [bootLoading, setBootLoading] = useState(true)
 
   const [stats, setStats] = useState<Stats | null>(null)
   const [users, setUsers] = useState<UserRow[]>([])
+
+  const [statsLoading, setStatsLoading] = useState(false)
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [creatingUser, setCreatingUser] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [actionBusy, setActionBusy] = useState<string | null>(null)
 
   const [newUsername, setNewUsername] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -81,37 +195,90 @@ export default function Admin() {
 
   const [err, setErr] = useState("")
   const [msg, setMsg] = useState("")
-  const [busy, setBusy] = useState(false)
+  const [statsErr, setStatsErr] = useState("")
+  const [usersErr, setUsersErr] = useState("")
 
   const [confirmText, setConfirmText] = useState("")
   const [resetStartDate, setResetStartDate] = useState("")
   const [resetEndDate, setResetEndDate] = useState("")
 
-  async function loadStats() {
-    const res = await fetch(`${API_BASE}/api/admin/stats`, {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-    })
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      const aActive = a.is_active ?? true
+      const bActive = b.is_active ?? true
 
-    const data = await res.json()
-    if (!res.ok) throw new Error(data?.error || "Gagal mengambil statistik")
-    setStats(data)
+      if (aActive !== bActive) return aActive ? -1 : 1
+
+      return (a.username || "").localeCompare(b.username || "", "id-ID", {
+        sensitivity: "base",
+      })
+    })
+  }, [users])
+
+  const anyUserActionBusy = Boolean(actionBusy)
+
+  async function loadStats() {
+    setStatsLoading(true)
+    setStatsErr("")
+
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/stats`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      })
+
+      const data = await readJsonSafe(res)
+      if (!res.ok) {
+        throw new Error(data?.error || "Gagal mengambil statistik")
+      }
+
+      setStats(data)
+    } catch (e: any) {
+      setStatsErr(e?.message || "Gagal mengambil statistik")
+      throw e
+    } finally {
+      setStatsLoading(false)
+    }
   }
 
   async function loadUsers() {
-    const res = await fetch(`${API_BASE}/api/admin/users`, {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-    })
+    setUsersLoading(true)
+    setUsersErr("")
 
-    const data = await res.json()
-    if (!res.ok) throw new Error(data?.error || "Gagal mengambil user")
-    setUsers(data?.data || [])
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      })
+
+      const data = await readJsonSafe(res)
+      if (!res.ok) {
+        throw new Error(data?.error || "Gagal mengambil user")
+      }
+
+      setUsers(data?.data || [])
+    } catch (e: any) {
+      setUsersErr(e?.message || "Gagal mengambil user")
+      throw e
+    } finally {
+      setUsersLoading(false)
+    }
   }
 
-  async function initAdminPage() {
+  async function loadInitialData() {
+    const results = await Promise.allSettled([loadStats(), loadUsers()])
+
+    const rejected = results.find((item) => item.status === "rejected")
+    if (rejected) {
+      setErr(
+        "Sebagian data admin gagal dimuat. Coba refresh atau login ulang jika akses ditolak."
+      )
+    }
+  }
+
+  useEffect(() => {
     if (!username) {
       nav("/", { replace: true })
       return
@@ -122,37 +289,27 @@ export default function Admin() {
       return
     }
 
-    try {
-      setErr("")
-      await Promise.all([loadStats(), loadUsers()])
-    } catch (e: any) {
-      setErr(
-        e?.message ||
-          "Akses admin tidak valid atau data admin gagal dimuat. Silakan login ulang."
-      )
-    } finally {
-      setPageLoading(false)
-    }
-  }
+    setBootLoading(false)
+    loadInitialData()
 
-  useEffect(() => {
-    initAdminPage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleRefreshAll() {
     setErr("")
     setMsg("")
-    setBusy(true)
+    setRefreshing(true)
 
-    try {
-      await Promise.all([loadStats(), loadUsers()])
+    const results = await Promise.allSettled([loadStats(), loadUsers()])
+
+    const hasError = results.some((item) => item.status === "rejected")
+    if (hasError) {
+      setErr("Sebagian data gagal diperbarui")
+    } else {
       setMsg("Data admin diperbarui")
-    } catch (e: any) {
-      setErr(e?.message || "Gagal memperbarui data")
-    } finally {
-      setBusy(false)
     }
+
+    setRefreshing(false)
   }
 
   async function handleCreateUser() {
@@ -163,7 +320,7 @@ export default function Admin() {
 
     setErr("")
     setMsg("")
-    setBusy(true)
+    setCreatingUser(true)
 
     try {
       const res = await fetch(`${API_BASE}/api/admin/users`, {
@@ -181,19 +338,22 @@ export default function Admin() {
         }),
       })
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || "Gagal menambah user")
+      const data = await readJsonSafe(res)
+      if (!res.ok) {
+        throw new Error(data?.error || "Gagal menambah user")
+      }
 
       setMsg("User berhasil dibuat")
       setNewUsername("")
       setNewPassword("")
       setNewRole("USER")
       setNewOperationalAccess("NONE")
+
       await loadUsers()
     } catch (e: any) {
       setErr(e?.message || "Gagal membuat user")
     } finally {
-      setBusy(false)
+      setCreatingUser(false)
     }
   }
 
@@ -205,11 +365,12 @@ export default function Admin() {
       is_active: boolean
       password: string
     }>,
-    successMessage?: string
+    successMessage?: string,
+    actionName = "update"
   ) {
     setErr("")
     setMsg("")
-    setBusy(true)
+    setActionBusy(`${actionName}:${user.id}`)
 
     try {
       const res = await fetch(`${API_BASE}/api/admin/users/${user.id}`, {
@@ -221,7 +382,7 @@ export default function Admin() {
         body: JSON.stringify(patch),
       })
 
-      const result = await res.json()
+      const result = await readJsonSafe(res)
 
       if (!res.ok) {
         throw new Error(result?.error || "Gagal memperbarui user")
@@ -248,7 +409,7 @@ export default function Admin() {
     } catch (e: any) {
       setErr(e?.message || "Gagal memperbarui user")
     } finally {
-      setBusy(false)
+      setActionBusy(null)
     }
   }
 
@@ -259,6 +420,7 @@ export default function Admin() {
     const ok = window.confirm(
       `Yakin ingin ${actionLabel} user ${user.username}?`
     )
+
     if (!ok) return
 
     await handleUpdateUser(
@@ -266,7 +428,8 @@ export default function Admin() {
       {
         is_active: !(user.is_active ?? true),
       },
-      `User ${user.username} berhasil diperbarui`
+      `User ${user.username} berhasil diperbarui`,
+      "toggle"
     )
   }
 
@@ -274,6 +437,7 @@ export default function Admin() {
     const newPass = window.prompt(
       `Masukkan password baru untuk ${user.username}`
     )
+
     if (!newPass) return
 
     await handleUpdateUser(
@@ -281,12 +445,13 @@ export default function Admin() {
       {
         password: newPass,
       },
-      `Password user ${user.username} berhasil direset`
+      `Password user ${user.username} berhasil direset`,
+      "password"
     )
   }
 
   async function handleChangeRole(user: UserRow, nextRole: AccountRole) {
-    const currentRole = (user.role as AccountRole) || "USER"
+    const currentRole = (user.role as AccountRole) === "ADMIN" ? "ADMIN" : "USER"
     if (currentRole === nextRole) return
 
     const isSelf = user.username === username
@@ -297,15 +462,18 @@ export default function Admin() {
         ? `Yakin ingin mengubah akun kamu sendiri menjadi ${roleLabel}?`
         : `Yakin ingin mengubah role ${user.username} menjadi ${roleLabel}?`
     )
+
     if (!ok) return
 
     await handleUpdateUser(
       user,
       {
         role: nextRole,
-        operational_access: nextRole === "ADMIN" ? "NONE" : user.operational_access ?? "NONE",
+        operational_access:
+          nextRole === "ADMIN" ? "NONE" : user.operational_access ?? "NONE",
       },
-      `Role ${user.username} berhasil diubah menjadi ${roleLabel}`
+      `Role ${user.username} berhasil diubah menjadi ${roleLabel}`,
+      "role"
     )
   }
 
@@ -318,7 +486,8 @@ export default function Admin() {
       {
         operational_access: operationalAccess,
       },
-      `Akses ${user.username} berhasil diperbarui`
+      `Akses ${user.username} berhasil diperbarui`,
+      "access"
     )
   }
 
@@ -335,17 +504,20 @@ export default function Admin() {
 
     const dateText =
       resetStartDate || resetEndDate
-        ? `\n\nRange tanggal:\n${resetStartDate || "(awal)"} s/d ${resetEndDate || "(akhir)"}`
+        ? `\n\nRange tanggal:\n${resetStartDate || "(awal)"} s/d ${
+            resetEndDate || "(akhir)"
+          }`
         : "\n\nSemua data akan dihapus."
 
     const ok = window.confirm(
       `Yakin ingin reset data operasional dan menghapus photo?${dateText}`
     )
+
     if (!ok) return
 
     setErr("")
     setMsg("")
-    setBusy(true)
+    setResetting(true)
 
     try {
       const res = await fetch(`${API_BASE}/api/admin/reset-operational`, {
@@ -360,43 +532,33 @@ export default function Admin() {
         }),
       })
 
-      const data = await res.json()
+      const data = await readJsonSafe(res)
       if (!res.ok) throw new Error(data?.error || "Reset gagal")
 
       setMsg(data?.message || "Reset berhasil")
       setConfirmText("")
-      await Promise.all([loadStats(), loadUsers()])
+
+      await Promise.allSettled([loadStats(), loadUsers()])
     } catch (e: any) {
       setErr(e?.message || "Reset gagal")
     } finally {
-      setBusy(false)
+      setResetting(false)
     }
   }
 
-  if (pageLoading) {
-    return (
-      <AppLayout hideTopbar>
-        <div className="mx-auto w-full max-w-6xl p-4 sm:p-6">
-          <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-8 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-            <div className="text-sm font-semibold text-slate-700">
-              Loading admin workspace...
-            </div>
-          </div>
-        </div>
-      </AppLayout>
-    )
-  }
+  if (bootLoading) return <PageLoading />
 
   if (!username || !isAdminAccount) return null
 
   return (
     <>
       <AdminTopbar />
+
       <AppLayout hideTopbar>
-        <div className="mx-auto w-full max-w-7xl p-4 sm:p-6">
-          <div className="mb-5 flex flex-col gap-3 rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.10)] sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="mx-auto w-full max-w-7xl p-3 sm:p-6">
+          <div className="mb-5 flex flex-col gap-4 rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-emerald-50/50 p-4 shadow-[0_24px_70px_rgba(15,23,42,0.10)] sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-emerald-700">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="16"
@@ -417,26 +579,34 @@ export default function Admin() {
                 Admin Workspace
               </div>
 
-              <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900">
+              <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
                 Admin Panel
               </h1>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                 Kelola user sistem, pantau isi database, dan lakukan reset
-                operasional dari satu dashboard yang rapi.
+                operasional dari satu dashboard.
               </p>
 
               <div className="mt-3 text-xs font-semibold text-slate-500">
-                Login sebagai: <span className="text-slate-800">{username}</span>
+                Login sebagai:{" "}
+                <span className="text-slate-800">{username}</span>
               </div>
             </div>
 
             <button
               onClick={handleRefreshAll}
-              disabled={busy}
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+              disabled={refreshing}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
-              Refresh Semua Data
+              {refreshing ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Refreshing...
+                </>
+              ) : (
+                "Refresh Semua Data"
+              )}
             </button>
           </div>
 
@@ -453,17 +623,19 @@ export default function Admin() {
           ) : null}
 
           <div className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
-            <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_55px_rgba(15,23,42,0.08)] sm:p-6">
+            <section className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_18px_55px_rgba(15,23,42,0.08)] sm:p-6">
               <div className="mb-5">
-                <div className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-sky-700">
+                <div className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-sky-700 sm:text-[11px]">
                   User Access Management
                 </div>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-900">
+
+                <h2 className="mt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
                   Kelola Akses User
                 </h2>
+
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   Tambah user baru, ubah role user/admin, atur akses operasional,
-                  aktif-nonaktifkan akun, dan reset password bila diperlukan.
+                  aktif-nonaktifkan akun, dan reset password.
                 </p>
               </div>
 
@@ -494,6 +666,7 @@ export default function Admin() {
                       onChange={(e) => {
                         const value = e.target.value as AccountRole
                         setNewRole(value)
+
                         if (value === "ADMIN") {
                           setNewOperationalAccess("NONE")
                         }
@@ -521,10 +694,17 @@ export default function Admin() {
 
                     <button
                       onClick={handleCreateUser}
-                      disabled={busy}
-                      className="rounded-2xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-3 font-extrabold text-white shadow-[0_12px_30px_rgba(5,150,105,0.20)] transition hover:from-[#166534] hover:to-[#16A34A] disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={creatingUser}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#15803D] to-[#22A745] px-4 py-3 font-extrabold text-white shadow-[0_12px_30px_rgba(5,150,105,0.20)] transition hover:from-[#166534] hover:to-[#16A34A] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Tambah User
+                      {creatingUser ? (
+                        <>
+                          <Spinner className="h-4 w-4" />
+                          Menambah...
+                        </>
+                      ) : (
+                        "Tambah User"
+                      )}
                     </button>
                   </div>
                 </div>
@@ -532,115 +712,66 @@ export default function Admin() {
 
               <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
                 <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                  <div className="text-sm font-bold text-slate-800">
-                    Daftar User
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    Total user: {users.length}
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-slate-800">
+                        Daftar User
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        Total user: {usersLoading ? "..." : sortedUsers.length}
+                      </div>
+                    </div>
+
+                    {usersLoading ? (
+                      <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500">
+                        <Spinner className="h-3.5 w-3.5" />
+                        Loading
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-white">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-bold text-slate-600">
-                          Username
-                        </th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-600">
-                          Role Akun
-                        </th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-600">
-                          Akses Operasional
-                        </th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-600">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left font-bold text-slate-600">
-                          Update
-                        </th>
-                        <th className="px-4 py-3 text-right font-bold text-slate-600">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
+                {usersErr ? (
+                  <div className="border-b border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                    {usersErr}
+                  </div>
+                ) : null}
 
-                    <tbody>
-                      {users.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={6}
-                            className="px-4 py-8 text-center text-sm text-slate-500"
-                          >
-                            Belum ada user.
-                          </td>
-                        </tr>
-                      ) : (
-                        users.map((u) => {
+                {usersLoading && sortedUsers.length === 0 ? (
+                  <UserListSkeleton />
+                ) : sortedUsers.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-slate-500">
+                    Belum ada user.
+                  </div>
+                ) : (
+                  <>
+                    <div className="block md:hidden">
+                      <div className="space-y-3 bg-slate-50/60 p-3">
+                        {sortedUsers.map((u) => {
                           const active = u.is_active ?? true
                           const currentRole =
                             (u.role as AccountRole) === "ADMIN"
                               ? "ADMIN"
                               : "USER"
+                          const rowBusy = actionBusy?.endsWith(`:${u.id}`)
 
                           return (
-                            <tr
+                            <div
                               key={u.id}
-                              className="border-t border-slate-200 align-top"
+                              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
                             >
-                              <td className="px-4 py-3">
-                                <div className="font-semibold text-slate-800">
-                                  {u.username}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate font-black text-slate-900">
+                                    {u.username}
+                                  </div>
+                                  <div className="mt-1 text-[11px] text-slate-500">
+                                    Dibuat: {formatDateLabel(u.created_at)}
+                                  </div>
                                 </div>
-                                <div className="mt-1 text-[11px] text-slate-500">
-                                  Dibuat: {formatDateLabel(u.created_at)}
-                                </div>
-                              </td>
 
-                              <td className="px-4 py-3 text-slate-700">
-                                <select
-                                  value={currentRole}
-                                  disabled={busy}
-                                  onChange={(e) =>
-                                    handleChangeRole(
-                                      u,
-                                      e.target.value as AccountRole
-                                    )
-                                  }
-                                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
-                                >
-                                  <option value="USER">USER</option>
-                                  <option value="ADMIN">ADMIN</option>
-                                </select>
-                              </td>
-
-                              <td className="px-4 py-3 text-slate-700">
-                                {currentRole === "ADMIN" ? (
-                                  <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                                    FULL ACCESS
-                                  </span>
-                                ) : (
-                                  <select
-                                    value={u.operational_access ?? "NONE"}
-                                    disabled={busy}
-                                    onChange={(e) =>
-                                      handleChangeOperationalAccess(
-                                        u,
-                                        e.target.value as OperationalAccess
-                                      )
-                                    }
-                                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
-                                  >
-                                    <option value="NONE">NONE</option>
-                                    <option value="FIELD">FIELD</option>
-                                    <option value="PJA">PJA</option>
-                                  </select>
-                                )}
-                              </td>
-
-                              <td className="px-4 py-3">
                                 <span
-                                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
                                     active
                                       ? "bg-emerald-50 text-emerald-700"
                                       : "bg-red-50 text-red-700"
@@ -648,109 +779,311 @@ export default function Admin() {
                                 >
                                   {active ? "ACTIVE" : "INACTIVE"}
                                 </span>
-                              </td>
+                              </div>
 
-                              <td className="px-4 py-3 text-[11px] text-slate-500">
-                                {formatDateLabel(u.updated_at)}
-                              </td>
+                              <div className="mt-4 grid gap-3">
+                                <div>
+                                  <label className="mb-1 block text-xs font-bold text-slate-500">
+                                    Role Akun
+                                  </label>
+                                  <select
+                                    value={currentRole}
+                                    disabled={anyUserActionBusy}
+                                    onChange={(e) =>
+                                      handleChangeRole(
+                                        u,
+                                        e.target.value as AccountRole
+                                      )
+                                    }
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+                                  >
+                                    <option value="USER">USER</option>
+                                    <option value="ADMIN">ADMIN</option>
+                                  </select>
+                                </div>
 
-                              <td className="px-4 py-3">
-                                <div className="flex min-w-[240px] flex-wrap justify-end gap-2">
+                                <div>
+                                  <label className="mb-1 block text-xs font-bold text-slate-500">
+                                    Akses Operasional
+                                  </label>
+
+                                  {currentRole === "ADMIN" ? (
+                                    <div className="inline-flex rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                                      FULL ACCESS
+                                    </div>
+                                  ) : (
+                                    <select
+                                      value={u.operational_access ?? "NONE"}
+                                      disabled={anyUserActionBusy}
+                                      onChange={(e) =>
+                                        handleChangeOperationalAccess(
+                                          u,
+                                          e.target.value as OperationalAccess
+                                        )
+                                      }
+                                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+                                    >
+                                      <option value="NONE">NONE</option>
+                                      <option value="FIELD">FIELD</option>
+                                      <option value="PJA">PJA</option>
+                                    </select>
+                                  )}
+                                </div>
+
+                                <div className="text-[11px] font-semibold text-slate-500">
+                                  Update terakhir:{" "}
+                                  {formatDateLabel(u.updated_at)}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
                                   <button
                                     onClick={() => handleResetPassword(u)}
-                                    disabled={busy}
-                                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                                    disabled={anyUserActionBusy}
+                                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                                   >
-                                    Reset Password
+                                    {rowBusy &&
+                                    actionBusy?.startsWith("password") ? (
+                                      <Spinner className="h-3.5 w-3.5" />
+                                    ) : null}
+                                    Reset Pass
                                   </button>
 
                                   <button
                                     onClick={() => handleToggleUser(u)}
-                                    disabled={busy}
-                                    className={`rounded-xl px-3 py-2 text-xs font-bold text-white transition disabled:opacity-60 ${
+                                    disabled={anyUserActionBusy}
+                                    className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-white transition disabled:opacity-60 ${
                                       active
                                         ? "bg-red-600 hover:bg-red-500"
                                         : "bg-emerald-600 hover:bg-emerald-500"
                                     }`}
                                   >
+                                    {rowBusy &&
+                                    actionBusy?.startsWith("toggle") ? (
+                                      <Spinner className="h-3.5 w-3.5" />
+                                    ) : null}
                                     {active ? "Nonaktifkan" : "Aktifkan"}
                                   </button>
                                 </div>
-                              </td>
-                            </tr>
+                              </div>
+                            </div>
                           )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="hidden overflow-x-auto md:block">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-white">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-bold text-slate-600">
+                              Username
+                            </th>
+                            <th className="px-4 py-3 text-left font-bold text-slate-600">
+                              Role Akun
+                            </th>
+                            <th className="px-4 py-3 text-left font-bold text-slate-600">
+                              Akses Operasional
+                            </th>
+                            <th className="px-4 py-3 text-left font-bold text-slate-600">
+                              Status
+                            </th>
+                            <th className="px-4 py-3 text-left font-bold text-slate-600">
+                              Update
+                            </th>
+                            <th className="px-4 py-3 text-right font-bold text-slate-600">
+                              Action
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {sortedUsers.map((u) => {
+                            const active = u.is_active ?? true
+                            const currentRole =
+                              (u.role as AccountRole) === "ADMIN"
+                                ? "ADMIN"
+                                : "USER"
+                            const rowBusy = actionBusy?.endsWith(`:${u.id}`)
+
+                            return (
+                              <tr
+                                key={u.id}
+                                className="border-t border-slate-200 align-top"
+                              >
+                                <td className="px-4 py-3">
+                                  <div className="font-semibold text-slate-800">
+                                    {u.username}
+                                  </div>
+                                  <div className="mt-1 text-[11px] text-slate-500">
+                                    Dibuat: {formatDateLabel(u.created_at)}
+                                  </div>
+                                </td>
+
+                                <td className="px-4 py-3 text-slate-700">
+                                  <select
+                                    value={currentRole}
+                                    disabled={anyUserActionBusy}
+                                    onChange={(e) =>
+                                      handleChangeRole(
+                                        u,
+                                        e.target.value as AccountRole
+                                      )
+                                    }
+                                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+                                  >
+                                    <option value="USER">USER</option>
+                                    <option value="ADMIN">ADMIN</option>
+                                  </select>
+                                </td>
+
+                                <td className="px-4 py-3 text-slate-700">
+                                  {currentRole === "ADMIN" ? (
+                                    <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                      FULL ACCESS
+                                    </span>
+                                  ) : (
+                                    <select
+                                      value={u.operational_access ?? "NONE"}
+                                      disabled={anyUserActionBusy}
+                                      onChange={(e) =>
+                                        handleChangeOperationalAccess(
+                                          u,
+                                          e.target.value as OperationalAccess
+                                        )
+                                      }
+                                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+                                    >
+                                      <option value="NONE">NONE</option>
+                                      <option value="FIELD">FIELD</option>
+                                      <option value="PJA">PJA</option>
+                                    </select>
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-3">
+                                  <span
+                                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                                      active
+                                        ? "bg-emerald-50 text-emerald-700"
+                                        : "bg-red-50 text-red-700"
+                                    }`}
+                                  >
+                                    {active ? "ACTIVE" : "INACTIVE"}
+                                  </span>
+                                </td>
+
+                                <td className="px-4 py-3 text-[11px] text-slate-500">
+                                  {formatDateLabel(u.updated_at)}
+                                </td>
+
+                                <td className="px-4 py-3">
+                                  <div className="flex min-w-[240px] flex-wrap justify-end gap-2">
+                                    <button
+                                      onClick={() => handleResetPassword(u)}
+                                      disabled={anyUserActionBusy}
+                                      className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                                    >
+                                      {rowBusy &&
+                                      actionBusy?.startsWith("password") ? (
+                                        <Spinner className="h-3.5 w-3.5" />
+                                      ) : null}
+                                      Reset Password
+                                    </button>
+
+                                    <button
+                                      onClick={() => handleToggleUser(u)}
+                                      disabled={anyUserActionBusy}
+                                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white transition disabled:opacity-60 ${
+                                        active
+                                          ? "bg-red-600 hover:bg-red-500"
+                                          : "bg-emerald-600 hover:bg-emerald-500"
+                                      }`}
+                                    >
+                                      {rowBusy &&
+                                      actionBusy?.startsWith("toggle") ? (
+                                        <Spinner className="h-3.5 w-3.5" />
+                                      ) : null}
+                                      {active ? "Nonaktifkan" : "Aktifkan"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
             </section>
 
-            <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_55px_rgba(15,23,42,0.08)] sm:p-6">
+            <section className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_18px_55px_rgba(15,23,42,0.08)] sm:p-6">
               <div className="mb-5">
-                <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-emerald-700">
+                <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-700 sm:text-[11px]">
                   System & Database
                 </div>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-900">
+
+                <h2 className="mt-3 text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
                   Pantau & Reset Data
                 </h2>
+
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Lihat isi database operasional dan lakukan reset data seluruhnya
-                  atau berdasarkan range tanggal.
+                  Lihat isi database operasional dan lakukan reset data
+                  seluruhnya atau berdasarkan range tanggal.
                 </p>
               </div>
 
+              {statsErr ? (
+                <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                  {statsErr}
+                </div>
+              ) : null}
+
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-[24px] border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm">
-                  <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                    Inspections
-                  </div>
-                  <div className="mt-3 text-3xl font-black text-slate-900">
-                    {stats?.inspectionsCount ?? 0}
-                  </div>
-                </div>
+                <StatCard
+                  label="Inspections"
+                  value={stats?.inspectionsCount}
+                  loading={statsLoading && !stats}
+                />
 
-                <div className="rounded-[24px] border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm">
-                  <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                    Inspection Lines
-                  </div>
-                  <div className="mt-3 text-3xl font-black text-slate-900">
-                    {stats?.linesCount ?? 0}
-                  </div>
-                </div>
+                <StatCard
+                  label="Inspection Lines"
+                  value={stats?.linesCount}
+                  loading={statsLoading && !stats}
+                />
 
-                <div className="rounded-[24px] border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm">
-                  <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                    Measures
-                  </div>
-                  <div className="mt-3 text-3xl font-black text-slate-900">
-                    {stats?.measuresCount ?? 0}
-                  </div>
-                </div>
+                <StatCard
+                  label="Measures"
+                  value={stats?.measuresCount}
+                  loading={statsLoading && !stats}
+                />
 
-                <div className="rounded-[24px] border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-5 shadow-sm">
-                  <div className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                    Photos
-                  </div>
-                  <div className="mt-3 text-3xl font-black text-slate-900">
-                    {stats?.photoCount ?? 0}
-                  </div>
-                  <div className="mt-2 break-all text-xs font-semibold text-slate-500">
-                    Bucket: {stats?.bucket ?? "-"}
-                  </div>
-                </div>
+                <StatCard
+                  label="Photos"
+                  value={stats?.photoCount}
+                  helper={`Bucket: ${stats?.bucket ?? "-"}`}
+                  loading={statsLoading && !stats}
+                />
               </div>
 
-              <div className="mt-5 rounded-[24px] border border-red-200 bg-gradient-to-b from-red-50 to-white p-5">
+              {statsLoading && stats ? (
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-500">
+                  <Spinner className="h-3.5 w-3.5" />
+                  Memperbarui statistik...
+                </div>
+              ) : null}
+
+              <div className="mt-5 rounded-[24px] border border-red-200 bg-gradient-to-b from-red-50 to-white p-4 sm:p-5">
                 <div className="flex flex-col gap-2">
                   <h3 className="text-xl font-black tracking-tight text-red-700">
                     Danger Zone
                   </h3>
+
                   <p className="text-sm leading-6 text-slate-600">
-                    Bisa hapus seluruh data atau filter berdasarkan range tanggal.
-                    Jika tanggal dikosongkan, semua data operasional dan semua
-                    file photo akan dihapus.
+                    Bisa hapus seluruh data atau filter berdasarkan range
+                    tanggal. Jika tanggal dikosongkan, semua data operasional
+                    dan semua file photo akan dihapus.
                   </p>
                 </div>
 
@@ -759,6 +1092,7 @@ export default function Admin() {
                     <label className="mb-1.5 block text-sm font-bold text-slate-800">
                       Tanggal mulai
                     </label>
+
                     <input
                       type="date"
                       value={resetStartDate}
@@ -771,6 +1105,7 @@ export default function Admin() {
                     <label className="mb-1.5 block text-sm font-bold text-slate-800">
                       Tanggal akhir
                     </label>
+
                     <input
                       type="date"
                       value={resetEndDate}
@@ -785,6 +1120,7 @@ export default function Admin() {
                     Ketik <span className="text-red-600">RESET</span> untuk
                     konfirmasi
                   </label>
+
                   <input
                     value={confirmText}
                     onChange={(e) => setConfirmText(e.target.value)}
@@ -795,12 +1131,17 @@ export default function Admin() {
 
                 <button
                   onClick={handleReset}
-                  disabled={busy}
-                  className="mt-4 w-full rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-[0_12px_30px_rgba(220,38,38,0.20)] transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={resetting}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-[0_12px_30px_rgba(220,38,38,0.20)] transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {busy
-                    ? "Memproses..."
-                    : "Reset Operasional + Hapus Photo"}
+                  {resetting ? (
+                    <>
+                      <Spinner className="h-4 w-4" />
+                      Memproses Reset...
+                    </>
+                  ) : (
+                    "Reset Operasional + Hapus Photo"
+                  )}
                 </button>
               </div>
             </section>
