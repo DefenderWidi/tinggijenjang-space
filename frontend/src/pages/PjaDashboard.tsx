@@ -12,7 +12,14 @@ const DISPOSAL_LIMIT_M = 50
 const ROAD_LIMIT_M = 50
 
 type Shift = "DAY" | "NIGHT"
-type Pelaksanaan = "START" | "MID" | "END"
+type Pelaksanaan =
+  | "START"
+  | "MID"
+  | "END"
+  | "FASE_1"
+  | "FASE_2"
+  | "FASE_3"
+  | "FASE_4"
 type ReviewStatus = "PENDING" | "VALID"
 type TabKey = "PENDING" | "VALID" | "ALL"
 type InspectionType = "FRONT" | "DISPOSAL" | "ROAD"
@@ -79,6 +86,11 @@ function shiftLabel(s: Shift) {
 }
 
 function pelaksanaanLabel(p: Pelaksanaan) {
+  if (p === "FASE_1") return "Fase 1"
+  if (p === "FASE_2") return "Fase 2"
+  if (p === "FASE_3") return "Fase 3"
+  if (p === "FASE_4") return "Fase 4"
+
   if (p === "START") return "Awal Shift"
   if (p === "MID") return "Tengah Shift"
   return "Akhir Shift"
@@ -308,6 +320,7 @@ export default function PjaDashboard() {
   const [active, setActive] = useState<InspectionRow | null>(null)
   const [imgOpen, setImgOpen] = useState(false)
   const [notes, setNotes] = useState("")
+  const [loading45, setLoading45] = useState<boolean | null>(null)
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [measureMeta, setMeasureMeta] = useState<{
@@ -359,11 +372,23 @@ export default function PjaDashboard() {
         inspectedAt: String(x.inspected_at ?? x.inspectedAt ?? ""),
         inspector: String(x.inspector ?? ""),
         shift: (x.shift === "DAY" || x.shift === "NIGHT" ? x.shift : "DAY") as Shift,
-        pelaksanaan: (
-          x.pelaksanaan === "START" || x.pelaksanaan === "MID" || x.pelaksanaan === "END"
-            ? x.pelaksanaan
-            : "START"
-        ) as Pelaksanaan,
+        pelaksanaan: (() => {
+          const rawPelaksanaan = String(x.pelaksanaan ?? "").trim().toUpperCase()
+
+          const validPelaksanaan = [
+            "START",
+            "MID",
+            "END",
+            "FASE_1",
+            "FASE_2",
+            "FASE_3",
+            "FASE_4",
+          ].includes(rawPelaksanaan)
+            ? rawPelaksanaan
+            : "FASE_1"
+
+          return validPelaksanaan as Pelaksanaan
+        })(),
         front: String(x.front ?? ""),
         linesCount: Number(x.lines_count ?? 0),
         linesOkCount: Number(x.lines_ok_count ?? 0),
@@ -455,6 +480,7 @@ export default function PjaDashboard() {
     setOpen(false)
     setActive(null)
     setNotes("")
+    setLoading45(null)
     setImgOpen(false)
 
     setPhotoUrl(null)
@@ -552,6 +578,7 @@ export default function PjaDashboard() {
     setActive(item)
     setOpen(true)
     setNotes(item.reviewNotes ?? "")
+    setLoading45(null)
 
     setRefVerify(
       item.ref_verify_ok === true ? true : item.ref_verify_ok === false ? false : null
@@ -604,8 +631,8 @@ export default function PjaDashboard() {
   }, [refVerify, refHeight, refHeightNumber])
 
   const canSubmit = useMemo(() => {
-    return allVerified && refVerifiedComplete
-  }, [allVerified, refVerifiedComplete])
+    return allVerified && refVerifiedComplete && loading45 !== null
+  }, [allVerified, refVerifiedComplete, loading45])
 
   async function send() {
     if (!active) return
@@ -623,6 +650,10 @@ export default function PjaDashboard() {
 
       if (refHeight.trim() === "" || refHeightNumber == null) {
         throw new Error("Tinggi referensi wajib diisi.")
+      }
+
+      if (loading45 === null) {
+        throw new Error("Status loading 45 derajat wajib dipilih.")
       }
 
       const missingHeight = lines.filter((ln) => ln.heightM == null)
@@ -663,10 +694,11 @@ export default function PjaDashboard() {
         body: JSON.stringify({
           review_status: "VALID",
           reviewed_by: pjaName,
-          review_notes: notes || null,
+          review_notes: notes?.trim() ? notes.trim() : null,
           lines_ok_count: okCount,
           ref_verify_ok: refVerify,
           ref_verify_meter: refHeightNumber,
+          loading_45_ok: loading45,
         }),
       })
 
@@ -1470,6 +1502,89 @@ export default function PjaDashboard() {
                     </div>
 
                     <div className="relative rounded-3xl border border-buma-border bg-white p-3 sm:p-4 shadow-soft before:absolute before:inset-0 before:rounded-3xl before:border before:border-black/5 before:pointer-events-none">
+                      <div>
+                        <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+                          Verifikasi Loading 45 Derajat
+                        </div>
+
+                        <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+                          Pilih apakah posisi loading sudah memenuhi sudut 45 derajat.
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLoading45((prev) => (prev === true ? null : true))}
+                          className={cls(
+                            "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+                            loading45 === true
+                              ? "border-buma-blue/40 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                              : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                          )}
+                        >
+                          <span
+                            className={cls(
+                              "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px]",
+                              loading45 === true
+                                ? "border-buma-blue/40 bg-buma-blue/10"
+                                : "border-buma-border bg-buma-bg"
+                            )}
+                          >
+                            {loading45 === true ? "✓" : ""}
+                          </span>
+                          Ya
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setLoading45((prev) => (prev === false ? null : false))}
+                          className={cls(
+                            "inline-flex items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition select-none shadow-sm",
+                            loading45 === false
+                              ? "border-red-500/35 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+                              : "border-buma-border bg-white text-buma-text hover:bg-black/5"
+                          )}
+                        >
+                          <span
+                            className={cls(
+                              "inline-flex h-5 w-5 items-center justify-center rounded-md border text-[12px]",
+                              loading45 === false
+                                ? "border-red-500/35 bg-red-500/10"
+                                : "border-buma-border bg-buma-bg"
+                            )}
+                          >
+                            {loading45 === false ? "✓" : ""}
+                          </span>
+                          Tidak
+                        </button>
+                      </div>
+
+                      <div className="mt-3">
+                        <span
+                          className={cls(
+                            "inline-flex rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
+                            loading45 === null
+                              ? "border-buma-border bg-white text-buma-muted"
+                              : loading45
+                                ? "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-transparent text-buma-blue"
+                                : "border-red-500/30 bg-gradient-to-r from-red-500/15 to-transparent text-red-600"
+                          )}
+                        >
+                          {loading45 === null
+                            ? "BELUM DIPILIH"
+                            : loading45
+                              ? "LOADING 45°: YA"
+                              : "LOADING 45°: TIDAK"}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 text-[10px] leading-relaxed text-buma-muted">
+                        Klik opsi yang sama lagi untuk <b className="text-buma-text">membatalkan</b> pilihan.
+                      </div>
+                    </div>
+
+                    <div className="relative rounded-3xl border border-buma-border bg-white p-3 sm:p-4 shadow-soft before:absolute before:inset-0 before:rounded-3xl before:border before:border-black/5 before:pointer-events-none">
                       <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
                         Catatan
                       </div>
@@ -1531,8 +1646,8 @@ export default function PjaDashboard() {
 
                 {!canSubmit ? (
                   <div className="mt-2 text-xs text-buma-muted">
-                    * Wajib verifikasi <b className="text-buma-text">unit referensi</b> dan semua
-                    titik sebelum kirim.
+                    * Wajib verifikasi <b className="text-buma-text">unit referensi</b>, semua
+                    titik, dan status <b className="text-buma-text">loading 45 derajat</b> sebelum kirim.
                   </div>
                 ) : null}
               </div>

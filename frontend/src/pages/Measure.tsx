@@ -181,7 +181,7 @@ export default function Measure() {
 
   // shift time (pelaksanaan) + shift (DAY/NIGHT)
   const [shift, setShift] = useState<"" | Shift>("")
-  const [shiftTime, setShiftTime] = useState<"" | "START" | "MID" | "END">("")
+  const [shiftTime, setShiftTime] = useState< "" | "FASE_1" | "FASE_2" | "FASE_3" | "FASE_4">("")
 
   const [pixelPerMeter, setPixelPerMeter] = useState<number | null>(null)
   const [referenceLine, setReferenceLine] = useState<Line | null>(null)
@@ -335,19 +335,21 @@ function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
     ctx.arc(b.x, b.y, HIT_R + 2, 0, Math.PI * 2)
     ctx.stroke()
 
-    // compact badge position
-    ctx.font = "900 11px Arial"
-    const tagW = ctx.measureText(label).width
+// compact badge position - mini version
+const cleanText = text.replace(/\s*m$/i, "m")
 
-    ctx.font = "800 11px Arial"
-    const txtW = ctx.measureText(text).width
+ctx.font = "800 9px Arial"
+const tagW = ctx.measureText(label).width
 
-    const chipW = Math.max(18, tagW + 8)
-    const textPadLeft = 7
-    const textPadRight = 8
-    const gap = 4
-    const w = chipW + gap + txtW + textPadLeft + textPadRight + 8
-    const h = 26
+ctx.font = "700 9px Arial"
+const txtW = ctx.measureText(cleanText).width
+
+const chipW = Math.max(13, tagW + 5)
+const gap = 3
+const textPadLeft = 4
+const textPadRight = 5
+const w = chipW + gap + txtW + textPadLeft + textPadRight + 6
+const h = 18
 
     const topPt = a.y <= b.y ? a : b
     const bottomPt = a.y > b.y ? a : b
@@ -356,8 +358,8 @@ function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
     let bx = mx - w / 2
     bx = Math.max(8, Math.min(bx, ctx.canvas.width - w - 8))
 
-    const safeGap = 12
-    const laneStep = h + 6
+const safeGap = 8
+const laneStep = h + 4
 
     let by = topPt.y - h - safeGap
     let placed = false
@@ -420,31 +422,33 @@ function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
     ctx.setLineDash([])
     ctx.restore()
 
-    // outer white pill
-    ctx.fillStyle = "rgba(255,255,255,.94)"
-    ctx.strokeStyle = danger ? "rgba(220,38,38,.55)" : "rgba(0,0,0,.18)"
-    ctx.lineWidth = danger ? 1.5 : 1
-    roundRect(ctx, bx, by, w, h, 999, true, true)
+// outer white mini pill
+ctx.fillStyle = "rgba(255,255,255,.82)"
+ctx.strokeStyle = danger ? "rgba(220,38,38,.45)" : "rgba(15,23,42,.14)"
+ctx.lineWidth = danger ? 1.2 : 0.8
+roundRect(ctx, bx, by, w, h, 999, true, true)
 
-    // colored label chip
-    ctx.fillStyle = colors.core
-    roundRect(ctx, bx + 4, by + 4, chipW, h - 8, 999, true, false)
+// colored mini label chip
+ctx.fillStyle = colors.core
+roundRect(ctx, bx + 3, by + 3, chipW, h - 6, 999, true, false)
 
-    // label text
-    ctx.fillStyle = "#FFFFFF"
-    ctx.font = "900 11px Arial"
-    ctx.textBaseline = "middle"
-    ctx.fillText(label, bx + 4 + (chipW - tagW) / 2, by + h / 2 + 0.5)
+// label text
+ctx.fillStyle = "#FFFFFF"
+ctx.font = "800 9px Arial"
+ctx.textBaseline = "middle"
+ctx.fillText(label, bx + 3 + (chipW - tagW) / 2, by + h / 2 + 0.4)
 
-    // value text
-    ctx.font = "800 11px Arial"
-    ctx.strokeStyle = "rgba(255,255,255,.92)"
-    ctx.lineWidth = 2.5
-    const textX = bx + 4 + chipW + gap + textPadLeft
-    const textY = by + h / 2 + 0.5
-    ctx.strokeText(text, textX, textY)
-    ctx.fillStyle = danger ? "#B91C1C" : "#0B1220"
-    ctx.fillText(text, textX, textY)
+// value text
+ctx.font = "700 10px Arial"
+ctx.strokeStyle = "rgba(255,255,255,.75)"
+ctx.lineWidth = 1.6
+
+const textX = bx + 3 + chipW + gap + textPadLeft
+const textY = by + h / 2 + 0.4
+
+ctx.strokeText(cleanText, textX, textY)
+ctx.fillStyle = danger ? "#B91C1C" : "#0B1220"
+ctx.fillText(cleanText, textX, textY)
 
     ctx.restore()
   }
@@ -1042,29 +1046,33 @@ function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
                 </select>
               </div>
 
-              {/* pelaksanaan = START/MID/END */}
-              <div className="grid gap-1">
-                <label className="text-[11px] font-semibold text-buma-muted">
-                  Rentang Shift <span className="text-buma-orange">*</span>
-                </label>
+{/* pelaksanaan = FASE_1/FASE_2/FASE_3/FASE_4 */}
+<div className="grid gap-1">
+  <label className="text-[11px] font-semibold text-buma-muted">
+    Rentang Shift <span className="text-buma-orange">*</span>
+  </label>
 
-                <select
-                  value={shiftTime}
-                  onChange={(e) => {
-                    setShiftTime(e.target.value as "START" | "MID" | "END")
-                    setFormError(false)
-                  }}
-                  className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${formError && !shiftTime
-                    ? "border-red-500"
-                    : "border-buma-border focus:border-buma-green/60"
-                    }`}
-                >
-                  <option value="">— Pilih rentang shift —</option>
-                  <option value="START">Awal Shift</option>
-                  <option value="MID">Tengah Shift</option>
-                  <option value="END">Akhir Shift</option>
-                </select>
-              </div>
+  <select
+    value={shiftTime}
+    onChange={(e) => {
+      setShiftTime(
+        e.target.value as "FASE_1" | "FASE_2" | "FASE_3" | "FASE_4"
+      )
+      setFormError(false)
+    }}
+    className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${
+      formError && !shiftTime
+        ? "border-red-500"
+        : "border-buma-border focus:border-buma-green/60"
+    }`}
+  >
+    <option value="">— Pilih rentang shift —</option>
+    <option value="FASE_1">Fase 1</option>
+    <option value="FASE_2">Fase 2</option>
+    <option value="FASE_3">Fase 3</option>
+    <option value="FASE_4">Fase 4</option>
+  </select>
+</div>
 
               <input
                 ref={fileRef}

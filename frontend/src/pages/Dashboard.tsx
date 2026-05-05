@@ -39,6 +39,7 @@ type InspectionRow = {
   refMeter?: number | null
   refVerifyOk?: boolean | null
   refVerifyMeter?: number | null
+  loading45Ok?: boolean | null
   dashboardView: DashboardView
 }
 
@@ -147,13 +148,23 @@ function mapInspection(r: any): InspectionRow {
             : r.refVerifyOk === false
               ? false
               : null,
-    refVerifyMeter:
-      r.ref_verify_meter != null
-        ? Number(r.ref_verify_meter)
-        : r.refVerifyMeter != null
-          ? Number(r.refVerifyMeter)
+refVerifyMeter:
+  r.ref_verify_meter != null
+    ? Number(r.ref_verify_meter)
+    : r.refVerifyMeter != null
+      ? Number(r.refVerifyMeter)
+      : null,
+loading45Ok:
+  r.loading_45_ok === true
+    ? true
+    : r.loading_45_ok === false
+      ? false
+      : r.loading45Ok === true
+        ? true
+        : r.loading45Ok === false
+          ? false
           : null,
-    dashboardView: inferDashboardView(r),
+dashboardView: inferDashboardView(r),
   }
 }
 
@@ -183,9 +194,21 @@ function formatDateTime(dt: string) {
 function pelaksanaanLabel(p?: string) {
   const raw = String(p ?? "").trim().toUpperCase()
 
+  // Format baru
+  if (raw === "FASE_1" || raw === "FASE1" || raw === "FASE 1") return "Fase 1"
+  if (raw === "FASE_2" || raw === "FASE2" || raw === "FASE 2") return "Fase 2"
+  if (raw === "FASE_3" || raw === "FASE3" || raw === "FASE 3") return "Fase 3"
+  if (raw === "FASE_4" || raw === "FASE4" || raw === "FASE 4") return "Fase 4"
+
+  // Format lama
   if (raw === "START" || raw === "AWAL") return "Awal Shift"
   if (raw === "MID" || raw === "TENGAH") return "Tengah Shift"
   if (raw === "END" || raw === "AKHIR") return "Akhir Shift"
+
+  if (raw.includes("FASE1") || raw.includes("FASE_1") || raw.includes("FASE 1")) return "Fase 1"
+  if (raw.includes("FASE2") || raw.includes("FASE_2") || raw.includes("FASE 2")) return "Fase 2"
+  if (raw.includes("FASE3") || raw.includes("FASE_3") || raw.includes("FASE 3")) return "Fase 3"
+  if (raw.includes("FASE4") || raw.includes("FASE_4") || raw.includes("FASE 4")) return "Fase 4"
 
   if (raw.includes("AWAL")) return "Awal Shift"
   if (raw.includes("TENGAH")) return "Tengah Shift"
@@ -239,6 +262,24 @@ function viewLabel(view: DashboardView) {
   if (view === "DISPOSAL") return "Disposal"
   if (view === "ROAD") return "Road"
   return "Front"
+}
+
+function loading45Label(v?: boolean | null) {
+  if (v === true) return "Ya"
+  if (v === false) return "Tidak"
+  return "—"
+}
+
+function loading45Class(v?: boolean | null) {
+  if (v === true) {
+    return "border-buma-blue/30 bg-gradient-to-r from-buma-blue/15 to-buma-blue/5 text-buma-blue"
+  }
+
+  if (v === false) {
+    return "border-red-500/30 bg-gradient-to-r from-red-500/15 to-red-500/5 text-red-600"
+  }
+
+  return "border-buma-border bg-buma-bg text-buma-muted"
 }
 
 /* =========================
@@ -853,7 +894,7 @@ function DetailTable({
               Tidak ada data pada periode ini.
             </div>
           ) : (
-            <table className="w-full min-w-[1280px] text-[13px] text-buma-text">
+            <table className="w-full min-w-[1380px] text-[13px] text-buma-text">
               <thead className="sticky top-0 z-[1] bg-white">
                 <tr className="border-y border-buma-border text-left text-[11px] font-bold text-buma-muted">
                   <th className="px-3 py-2 min-w-[96px]">Tanggal</th>
@@ -866,9 +907,10 @@ function DetailTable({
                   <th className="px-2 py-2 min-w-[74px] text-center">Limit</th>
                   <th className="px-2 py-2 min-w-[78px] text-center">Max</th>
                   <th className="px-2 py-2 min-w-[54px] text-center">Titik</th>
-                  <th className="px-2 py-2 min-w-[108px] text-center">Kesesuaian</th>
-                  <th className="px-2 py-2 min-w-[96px]">Reviewer PJA</th>
-                  <th className="px-2 py-2 min-w-[88px] text-center">Status</th>
+<th className="px-2 py-2 min-w-[108px] text-center">Kesesuaian</th>
+<th className="px-2 py-2 min-w-[104px] text-center">Loading 45°</th>
+<th className="px-2 py-2 min-w-[96px]">Reviewer PJA</th>
+<th className="px-2 py-2 min-w-[88px] text-center">Status</th>
                   <th className="px-3 py-2 min-w-[88px] text-right">Aksi</th>
                 </tr>
               </thead>
@@ -971,6 +1013,17 @@ function DetailTable({
                           </span>
                         )}
                       </td>
+
+<td className="px-2 py-2.5 text-center">
+  <span
+    className={cls(
+      "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-extrabold",
+      loading45Class(r.loading45Ok)
+    )}
+  >
+    {loading45Label(r.loading45Ok)}
+  </span>
+</td>
 
                       <td className="px-2 py-2.5">
                         <div className="max-w-[96px] truncate" title={r.reviewedBy ?? "—"}>
@@ -1237,6 +1290,7 @@ function ReviewDetailModal({
                   <MetaCard k="Reviewer" v={active.reviewedBy ?? "—"} />
                   <MetaCard k="Ref Unit" v={active.refUnit ?? "—"} />
                   <MetaCard k="Limit" v={`${standardM.toFixed(2)} m`} />
+                  <MetaCard k="Loading 45°" v={loading45Label(active.loading45Ok)} />
 
                   <div className="rounded-2xl border border-buma-border bg-white p-3 text-xs">
                     <div className="text-buma-muted">Status</div>
@@ -1477,6 +1531,33 @@ function ReviewDetailModal({
                     )}
                   </div>
                 </div>
+
+<div className="relative rounded-3xl border border-buma-border bg-white p-3 sm:p-4 shadow-soft before:absolute before:inset-0 before:rounded-3xl before:border before:border-black/5 before:pointer-events-none">
+  <div>
+    <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
+      Loading 45 Derajat
+    </div>
+
+    <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+      Menampilkan hasil verifikasi sudut loading dari PJA.
+    </div>
+  </div>
+
+  <div className="mt-3">
+    <span
+      className={cls(
+        "inline-flex rounded-full border px-3 py-1 text-[10px] font-extrabold tracking-widest shadow-sm",
+        loading45Class(active.loading45Ok)
+      )}
+    >
+      {active.loading45Ok === true
+        ? "LOADING 45°: YA"
+        : active.loading45Ok === false
+          ? "LOADING 45°: TIDAK"
+          : "BELUM TERSEDIA"}
+    </span>
+  </div>
+</div>
 
                 <div className="relative rounded-3xl border border-buma-border bg-white p-3 sm:p-4 shadow-soft before:absolute before:inset-0 before:rounded-3xl before:border before:border-black/5 before:pointer-events-none">
                   <div className="text-[13px] font-extrabold tracking-wide text-buma-text">
@@ -1753,16 +1834,17 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
           return `${Number(ln.height_m).toFixed(2)} | ${status}`
         }
 
-        return {
-          mode_dashboard: viewLabel(currentView),
-          inspection_id: x.id,
-          tanggal: date,
-          waktu: mode === "DAILY" ? time : "—",
-          inspector: x.inspector,
-          shift: shiftLabel(x.shift),
-          pelaksanaan: x.pelaksanaan,
-          area: x.front,
-          ref_unit: x.refUnit ?? "",
+return {
+  mode_dashboard: viewLabel(currentView),
+  inspection_id: x.id,
+  tanggal: date,
+  waktu: mode === "DAILY" ? time : "—",
+  inspector: x.inspector,
+  shift: shiftLabel(x.shift),
+  pelaksanaan: x.pelaksanaan,
+  loading_45_derajat: loading45Label(x.loading45Ok),
+  area: x.front,
+  ref_unit: x.refUnit ?? "",
           ref_type: (x.refUnit ?? "").startsWith("S")
             ? "Shovel"
             : (x.refUnit ?? "").startsWith("B")
@@ -1787,12 +1869,32 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
       const wb = XLSX.utils.book_new()
       const wsAnalyst = XLSX.utils.json_to_sheet(analystSheet)
 
-      wsAnalyst["!cols"] = [
-        { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 10 },
-        { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
-        { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
-        { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 28 },
-      ]
+wsAnalyst["!cols"] = [
+  { wch: 14 }, // mode_dashboard
+  { wch: 18 }, // inspection_id
+  { wch: 12 }, // tanggal
+  { wch: 10 }, // waktu
+  { wch: 16 }, // inspector
+  { wch: 10 }, // shift
+  { wch: 16 }, // pelaksanaan
+  { wch: 18 }, // loading_45_derajat
+  { wch: 18 }, // area
+  { wch: 12 }, // ref_unit
+  { wch: 12 }, // ref_type
+  { wch: 10 }, // limit_m
+  { wch: 12 }, // max_height_m
+  { wch: 10 }, // total_titik
+  { wch: 12 }, // titik_sesuai
+  { wch: 12 }, // compliance_pct
+  { wch: 18 }, // titik_A
+  { wch: 18 }, // titik_B
+  { wch: 18 }, // titik_C
+  { wch: 18 }, // titik_D
+  { wch: 18 }, // titik_E
+  { wch: 14 }, // review_status
+  { wch: 16 }, // reviewed_by
+  { wch: 28 }, // photo_url
+]
 
       XLSX.utils.book_append_sheet(wb, wsAnalyst, "Analyst_View")
 

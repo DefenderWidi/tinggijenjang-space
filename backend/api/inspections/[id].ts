@@ -38,6 +38,20 @@ function toIntNonNeg(v: any): number | null {
   return i
 }
 
+function toBoolOrNull(v: any): boolean | null {
+  if (typeof v === "boolean") return v
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase()
+    if (s === "true" || s === "1" || s === "yes" || s === "ya") return true
+    if (s === "false" || s === "0" || s === "no" || s === "tidak") return false
+  }
+  if (typeof v === "number") {
+    if (v === 1) return true
+    if (v === 0) return false
+  }
+  return null
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res)
   if (req.method === "OPTIONS") return res.status(200).end()
@@ -98,6 +112,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!Number.isFinite(n)) return res.status(400).json({ error: "max_height_m must be a number" })
       payload.max_height_m = n
     }
+
+    if ("loading_45_ok" in body) {
+  if (body.loading_45_ok === null) {
+    payload.loading_45_ok = null
+    payload.loading_45_checked_at = null
+  } else {
+    const v = toBoolOrNull(body.loading_45_ok)
+    if (v === null) {
+      return res.status(400).json({
+        error: "loading_45_ok must be boolean",
+      })
+    }
+
+    payload.loading_45_ok = v
+    payload.loading_45_checked_at = new Date().toISOString()
+  }
+}
 
     if (Object.keys(payload).length === 0) {
       return res.status(400).json({ error: "No valid fields to update" })
