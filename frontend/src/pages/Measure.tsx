@@ -90,8 +90,8 @@ function SubmitResultCard({
 type Pt = { x: number; y: number }
 type Line = { p1: Pt; p2: Pt; id: string; label?: string }
 
-const HIT_R = 6
-const NEAR = HIT_R * 2
+const HIT_R = 4
+const NEAR = 10
 
 const ALPH = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -299,58 +299,93 @@ function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
 
-    // line glow
-    ctx.strokeStyle = colors.glow
-    ctx.lineWidth = 12
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.stroke()
+// line glow - halus, cuma bantu kontras
+ctx.strokeStyle = tone === "ref"
+  ? "rgba(22,163,74,.12)"
+  : danger
+    ? "rgba(220,38,38,.12)"
+    : "rgba(239,68,68,.12)"
+ctx.lineWidth = 4.8
+ctx.beginPath()
+ctx.moveTo(a.x, a.y)
+ctx.lineTo(b.x, b.y)
+ctx.stroke()
 
-    // line shadow
-    ctx.strokeStyle = "rgba(0,0,0,.55)"
-    ctx.lineWidth = 7
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.stroke()
+// line shadow / outline gelap tipis biar tetap kebaca di background terang
+ctx.strokeStyle = "rgba(0,0,0,.28)"
+ctx.lineWidth = 3.2
+ctx.beginPath()
+ctx.moveTo(a.x, a.y)
+ctx.lineTo(b.x, b.y)
+ctx.stroke()
 
-    // line core
-    ctx.strokeStyle = colors.core
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.stroke()
+// line highlight tipis biar muncul di area gelap / kabut
+ctx.strokeStyle = "rgba(255,255,255,.38)"
+ctx.lineWidth = 2.4
+ctx.beginPath()
+ctx.moveTo(a.x, a.y)
+ctx.lineTo(b.x, b.y)
+ctx.stroke()
 
-    // endpoints
-    drawPoint(ctx, a.x, a.y, "#FFFFFF")
-    ctx.strokeStyle = "rgba(0,0,0,.55)"
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.arc(a.x, a.y, HIT_R + 2, 0, Math.PI * 2)
-    ctx.stroke()
+// line core - tetap ramping tapi jelas
+ctx.strokeStyle = colors.core
+ctx.lineWidth = 2.6
+ctx.beginPath()
+ctx.moveTo(a.x, a.y)
+ctx.lineTo(b.x, b.y)
+ctx.stroke()
 
-    drawPoint(ctx, b.x, b.y, "#FFFFFF")
-    ctx.beginPath()
-    ctx.arc(b.x, b.y, HIT_R + 2, 0, Math.PI * 2)
-    ctx.stroke()
+// endpoints - kecil, clean, tetap jelas
+drawPoint(ctx, a.x, a.y, colors.core)
+ctx.strokeStyle = "rgba(255,255,255,.92)"
+ctx.lineWidth = 1.8
+ctx.beginPath()
+ctx.arc(a.x, a.y, HIT_R + 1.3, 0, Math.PI * 2)
+ctx.stroke()
 
-// compact badge position - mini version
+ctx.strokeStyle = "rgba(0,0,0,.42)"
+ctx.lineWidth = 1
+ctx.beginPath()
+ctx.arc(a.x, a.y, HIT_R + 2.4, 0, Math.PI * 2)
+ctx.stroke()
+
+drawPoint(ctx, b.x, b.y, colors.core)
+ctx.strokeStyle = "rgba(255,255,255,.92)"
+ctx.lineWidth = 1.8
+ctx.beginPath()
+ctx.arc(b.x, b.y, HIT_R + 1.3, 0, Math.PI * 2)
+ctx.stroke()
+
+ctx.strokeStyle = "rgba(0,0,0,.42)"
+ctx.lineWidth = 1
+ctx.beginPath()
+ctx.arc(b.x, b.y, HIT_R + 2.4, 0, Math.PI * 2)
+ctx.stroke()
+
 const cleanText = text.replace(/\s*m$/i, "m")
+const valueNum = cleanText.replace(/m$/i, "")
+const valueUnit = "m"
 
-ctx.font = "800 9px Arial"
+ctx.font = "900 9.4px Arial"
 const tagW = ctx.measureText(label).width
 
-ctx.font = "700 9px Arial"
-const txtW = ctx.measureText(cleanText).width
+// ukur angka utama dengan font lebih besar
+ctx.font = "900 11.8px Arial"
+const numW = ctx.measureText(valueNum).width
 
-const chipW = Math.max(13, tagW + 5)
-const gap = 3
-const textPadLeft = 4
-const textPadRight = 5
+// ukur huruf m dengan font lebih kecil
+ctx.font = "900 8.8px Arial"
+const unitW = ctx.measureText(valueUnit).width
+
+const valueGap = 1.5
+const txtW = numW + valueGap + unitW
+
+const chipW = Math.max(14, tagW + 6)
+const gap = 4
+const textPadLeft = 5
+const textPadRight = 9
 const w = chipW + gap + txtW + textPadLeft + textPadRight + 6
-const h = 18
+const h = 17
 
     const topPt = a.y <= b.y ? a : b
     const bottomPt = a.y > b.y ? a : b
@@ -423,33 +458,60 @@ const laneStep = h + 4
     ctx.setLineDash([])
     ctx.restore()
 
-// outer white mini pill
-ctx.fillStyle = "rgba(255,255,255,.82)"
-ctx.strokeStyle = danger ? "rgba(220,38,38,.45)" : "rgba(15,23,42,.14)"
-ctx.lineWidth = danger ? 1.2 : 0.8
+// outer badge - transparan gelap, tidak terlalu nutup background
+ctx.fillStyle = "rgba(18,22,30,.26)"
+ctx.strokeStyle = danger ? "rgba(248,113,113,.50)" : "rgba(255,255,255,.16)"
+ctx.lineWidth = 0.8
 roundRect(ctx, bx, by, w, h, 999, true, true)
 
-// colored mini label chip
-ctx.fillStyle = colors.core
+// colored mini label chip - dibikin lebih pekat / lebih gelap biar tulisan kuning kontras
+ctx.fillStyle =
+  tone === "ref"
+    ? "rgba(21,128,61,.84)"      // hijau lebih pekat
+    : danger
+      ? "rgba(185,28,28,.84)"    // merah lebih pekat
+      : "rgba(194,65,12,.84)"    // oranye tua biar kuning lebih kelihatan
 roundRect(ctx, bx + 3, by + 3, chipW, h - 6, 999, true, false)
 
-// label text
-ctx.fillStyle = "#FFFFFF"
-ctx.font = "800 9px Arial"
+// label text dengan outline lebih tebal
+ctx.font = "900 9.4px Arial"
 ctx.textBaseline = "middle"
-ctx.fillText(label, bx + 3 + (chipW - tagW) / 2, by + h / 2 + 0.4)
+ctx.lineJoin = "round"
 
-// value text
-ctx.font = "700 10px Arial"
-ctx.strokeStyle = "rgba(255,255,255,.75)"
-ctx.lineWidth = 1.6
+const labelX = bx + 3 + (chipW - tagW) / 2
+const labelY = by + h / 2 + 0.35
 
+ctx.strokeStyle = "rgba(0,0,0,.95)"
+ctx.lineWidth = 3
+ctx.strokeText(label, labelX, labelY)
+
+ctx.fillStyle = "#FDE047"
+ctx.fillText(label, labelX, labelY)
+
+// value text: angka besar, "m" lebih kecil
 const textX = bx + 3 + chipW + gap + textPadLeft
-const textY = by + h / 2 + 0.4
+const textY = by + h / 2 + 0.35
 
-ctx.strokeText(cleanText, textX, textY)
-ctx.fillStyle = danger ? "#B91C1C" : "#0B1220"
-ctx.fillText(cleanText, textX, textY)
+// angka utama
+ctx.font = "900 11.8px Arial"
+ctx.strokeStyle = "rgba(0,0,0,.98)"
+ctx.lineWidth = 3.6
+ctx.strokeText(valueNum, textX, textY)
+
+ctx.fillStyle = "#FDE047"
+ctx.fillText(valueNum, textX, textY)
+
+// huruf m kecil
+const numTextW = ctx.measureText(valueNum).width
+const unitX = textX + numTextW + 1.5
+
+ctx.font = "900 8.8px Arial"
+ctx.strokeStyle = "rgba(0,0,0,.95)"
+ctx.lineWidth = 2.4
+ctx.strokeText(valueUnit, unitX, textY)
+
+ctx.fillStyle = "#FDE047"
+ctx.fillText(valueUnit, unitX, textY)
 
     ctx.restore()
   }
