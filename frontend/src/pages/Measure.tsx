@@ -122,31 +122,6 @@ type Shift = "DAY" | "NIGHT"
 
 type BadgeRect = { x: number; y: number; w: number; h: number }
 
-const FRONT_OPTIONS = [
-  "B3610",
-  "B3608",
-  "B3606",
-  "B3605",
-  "S3604",
-  "S3603",
-  "S3602",
-  "S3601",
-  "S4006",
-  "S4004",
-  "B2510",
-  "S2503",
-  "S2501",
-  "B2048",
-  "B2045",
-  "B2042",
-  "B2040",
-  "B2041",
-  "B2036",
-  "B2020",
-  "B2019",
-  "B2012",
-] as const
-
 export default function Measure() {
   // ======= Refs =======
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -1060,30 +1035,24 @@ ctx.fillText(valueUnit, unitX, textY)
                 />
               </div>
 
-             <div className="grid gap-1">
+         <div className="grid gap-1">
   <label className="text-[11px] font-semibold text-buma-muted">
-    Area / Front <span className="text-buma-orange">*</span>
+    Front (Unit Loader)<span className="text-buma-orange">*</span>
   </label>
 
-  <select
+  <input
     value={areaId}
     onChange={(e) => {
       setAreaId(e.target.value)
       setFormError(false)
     }}
+    placeholder="Masukkan Front, contoh: B2503"
     className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${
-      formError && !areaId
+      formError && !areaId.trim()
         ? "border-red-500"
         : "border-buma-border focus:border-buma-green/60"
     }`}
-  >
-    <option value="">— Pilih area / front —</option>
-    {FRONT_OPTIONS.map((front) => (
-      <option key={front} value={front}>
-        {front}
-      </option>
-    ))}
-  </select>
+  />
 </div>
 
               {/* NEW: Shift DAY/NIGHT */}
@@ -1112,7 +1081,7 @@ ctx.fillText(valueUnit, unitX, textY)
 {/* pelaksanaan = FASE_1/FASE_2/FASE_3/FASE_4 */}
 <div className="grid gap-1">
   <label className="text-[11px] font-semibold text-buma-muted">
-    Rentang Shift <span className="text-buma-orange">*</span>
+    Fase <span className="text-buma-orange">*</span>
   </label>
 
   <select
@@ -1129,7 +1098,7 @@ ctx.fillText(valueUnit, unitX, textY)
         : "border-buma-border focus:border-buma-green/60"
     }`}
   >
-    <option value="">— Pilih rentang shift —</option>
+    <option value="">— Pilih fase —</option>
     <option value="FASE_1">Fase 1</option>
     <option value="FASE_2">Fase 2</option>
     <option value="FASE_3">Fase 3</option>
@@ -1176,7 +1145,7 @@ ctx.fillText(valueUnit, unitX, textY)
 
               {formError && !isFormValid && (
                 <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
-                  ⚠ Inspektor, Area/Front, dan Shift wajib diisi sebelum mengimpor foto.
+                  ⚠ Inspektor, Front, dan Shift wajib diisi sebelum mengimpor foto.
                 </div>
               )}
             </div>

@@ -2,12 +2,11 @@ import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 
-type ActiveRole = "FRONT" | "DISPOSAL" | "ROAD" | "PJA" | "EVALUATOR"
+type ActiveRole = "FRONT" | "PJA" | "EVALUATOR"
 type AccountRole = "USER" | "ADMIN"
 type OperationalAccess = "NONE" | "FIELD" | "PJA"
 
 const LS_KEY = "mt_session_v1"
-const ROAD_COMING_SOON = true
 
 type SessionData = {
   id?: string | null
@@ -30,6 +29,7 @@ function getSession(): SessionData | null {
 
 function saveSessionMerge(patch: Partial<SessionData>) {
   const prev = getSession() || {}
+
   localStorage.setItem(
     LS_KEY,
     JSON.stringify({
@@ -42,14 +42,13 @@ function saveSessionMerge(patch: Partial<SessionData>) {
 
 const routeMap: Record<ActiveRole, string> = {
   FRONT: "/measure",
-  DISPOSAL: "/measure-disposal",
-  ROAD: "/measure-road",
   PJA: "/pja",
   EVALUATOR: "/app",
 }
 
 export default function SelectRole() {
   const nav = useNavigate()
+
   const [selectedRole, setSelectedRole] = useState<ActiveRole>("FRONT")
   const [hoveredRole, setHoveredRole] = useState<ActiveRole | null>(null)
   const [notice, setNotice] = useState("")
@@ -58,6 +57,7 @@ export default function SelectRole() {
   const username = session?.username
   const accountRole = session?.accountRole
   const operationalAccess = session?.operationalAccess ?? "NONE"
+
   const isAdminAccount = accountRole === "ADMIN"
 
   const canAccessFront =
@@ -65,39 +65,23 @@ export default function SelectRole() {
     operationalAccess === "FIELD" ||
     operationalAccess === "PJA"
 
-  const canAccessDisposal =
-    isAdminAccount ||
-    operationalAccess === "FIELD" ||
-    operationalAccess === "PJA"
-
-  const canAccessRoad =
-    !ROAD_COMING_SOON &&
-    (isAdminAccount ||
-      operationalAccess === "FIELD" ||
-      operationalAccess === "PJA")
-
   const canAccessPja = isAdminAccount || operationalAccess === "PJA"
+
   const canAccessEvaluator = isAdminAccount
 
   const hasAnyOperationalAccess =
-    canAccessFront ||
-    canAccessDisposal ||
-    canAccessRoad ||
-    canAccessPja ||
-    canAccessEvaluator
+    canAccessFront || canAccessPja || canAccessEvaluator
 
   useEffect(() => {
-    if (!username) nav("/", { replace: true })
+    if (!username) {
+      nav("/", { replace: true })
+    }
   }, [username, nav])
 
   function canAccessRole(role: ActiveRole) {
     switch (role) {
       case "FRONT":
         return canAccessFront
-      case "DISPOSAL":
-        return canAccessDisposal
-      case "ROAD":
-        return canAccessRoad
       case "PJA":
         return canAccessPja
       case "EVALUATOR":
@@ -106,13 +90,6 @@ export default function SelectRole() {
   }
 
   function handlePickRole(role: ActiveRole) {
-    if (role === "ROAD") {
-      setNotice(
-        "Fitur Inspector Jalan sedang dalam pengembangan dan akan segera hadir."
-      )
-      return
-    }
-
     const allowed = canAccessRole(role)
 
     if (!allowed) {
@@ -137,42 +114,22 @@ export default function SelectRole() {
       return
     }
 
+    setNotice("")
     setSelectedRole(role)
     setHoveredRole(null)
     saveSessionMerge({ activeRole: role })
-    return nav(routeMap[role], { replace: true })
+    nav(routeMap[role], { replace: true })
   }
 
   const cleanedNotice = notice
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      <style>{`
-        @keyframes roleShimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-
-        .role-shimmer-text {
-          background: linear-gradient(
-            110deg,
-            rgba(253, 224, 71, 0.35) 0%,
-            rgba(255, 251, 235, 1) 35%,
-            rgba(253, 224, 71, 0.35) 65%,
-            rgba(253, 224, 71, 0.35) 100%
-          );
-          background-size: 220% 100%;
-          animation: roleShimmer 2.4s linear infinite;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-      `}</style>
-
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/LoginBackground.jpeg')" }}
       />
+
       <div className="absolute inset-0 bg-black/60" />
 
       <div className="pointer-events-none absolute inset-0">
@@ -183,7 +140,7 @@ export default function SelectRole() {
       <div className="relative z-10 flex min-h-screen items-center">
         <div className="mx-auto w-full max-w-[1760px] px-4 sm:px-5 xl:px-6">
           <div className="grid gap-8 lg:grid-cols-[0.82fr_1.48fr] lg:gap-12">
-            <div className="hidden lg:flex flex-col justify-center lg:pl-14 xl:pl-20">
+            <div className="hidden flex-col justify-center lg:flex lg:pl-14 xl:pl-20">
               <div className="max-w-lg">
                 <div className="mb-5 inline-flex items-center gap-3 rounded-3xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-xl">
                   <img
@@ -191,6 +148,7 @@ export default function SelectRole() {
                     alt="PT BUMA Logo"
                     className="h-9 w-auto object-contain"
                   />
+
                   <div className="leading-tight">
                     <div className="text-xs font-semibold uppercase tracking-[0.26em] text-white/80">
                       Production Division
@@ -260,7 +218,7 @@ export default function SelectRole() {
                       </div>
                     </div>
 
-                    <div className="flex shrink-0 flex-col items-end gap-1.5 pt-1 text-right leading-none text-[11px] text-white/85">
+                    <div className="flex shrink-0 flex-col items-end gap-1.5 pt-1 text-right text-[11px] leading-none text-white/85">
                       <div className="max-w-[120px] truncate font-semibold text-white/95">
                         {username}
                       </div>
@@ -294,8 +252,6 @@ export default function SelectRole() {
                       hoveredRole={hoveredRole}
                       selectedRole={selectedRole}
                       canAccessFront={canAccessFront}
-                      canAccessDisposal={canAccessDisposal}
-                      canAccessRoad={canAccessRoad}
                       onPickRole={handlePickRole}
                       onPreviewRole={setHoveredRole}
                       onClearPreview={() => setHoveredRole(null)}
@@ -363,7 +319,12 @@ export default function SelectRole() {
                                 fill="currentColor"
                                 d="M12 23C6.443 21.765 2 16.522 2 11V5l10-4l10 4v6c0 5.524-4.443 10.765-10 12M4 6v5a10.58 10.58 0 0 0 8 10a10.58 10.58 0 0 0 8-10V6l-8-3Z"
                               />
-                              <circle cx="12" cy="8.5" r="2.5" fill="currentColor" />
+                              <circle
+                                cx="12"
+                                cy="8.5"
+                                r="2.5"
+                                fill="currentColor"
+                              />
                               <path
                                 fill="currentColor"
                                 d="M7 15a5.78 5.78 0 0 0 5 3a5.78 5.78 0 0 0 5-3c-.025-1.896-3.342-3-5-3c-1.667 0-4.975 1.104-5 3"
@@ -396,8 +357,6 @@ function InspectorGroupCard({
   hoveredRole,
   selectedRole,
   canAccessFront,
-  canAccessDisposal,
-  canAccessRoad,
   onPickRole,
   onPreviewRole,
   onClearPreview,
@@ -405,16 +364,11 @@ function InspectorGroupCard({
   hoveredRole: ActiveRole | null
   selectedRole: ActiveRole
   canAccessFront: boolean
-  canAccessDisposal: boolean
-  canAccessRoad: boolean
   onPickRole: (role: ActiveRole) => void
   onPreviewRole: (role: ActiveRole | null) => void
   onClearPreview: () => void
 }) {
-  const inspectorHoverRole =
-    hoveredRole === "FRONT" || hoveredRole === "DISPOSAL" || hoveredRole === "ROAD"
-      ? hoveredRole
-      : null
+  const inspectorHoverRole = hoveredRole === "FRONT" ? hoveredRole : null
 
   return (
     <motion.div
@@ -440,12 +394,12 @@ function InspectorGroupCard({
             </div>
 
             <div className="mt-1 text-[12px] leading-relaxed text-white/85">
-              Pilih area kerja pengukuran.
+              Workspace pengukuran tinggi jenjang area front.
             </div>
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-3" onMouseLeave={onClearPreview}>
+        <div className="grid gap-2" onMouseLeave={onClearPreview}>
           <InspectorSegmentButton
             label="Front"
             role="FRONT"
@@ -453,29 +407,6 @@ function InspectorGroupCard({
             selected={selectedRole === "FRONT"}
             disabled={!canAccessFront}
             imgSrc="/frontinspector.png"
-            onPreview={onPreviewRole}
-            onPick={onPickRole}
-          />
-
-          <InspectorSegmentButton
-            label="Disposal"
-            role="DISPOSAL"
-            active={hoveredRole === "DISPOSAL"}
-            selected={selectedRole === "DISPOSAL"}
-            disabled={!canAccessDisposal}
-            imgSrc="/disposalinspector.png"
-            onPreview={onPreviewRole}
-            onPick={onPickRole}
-          />
-
-          <InspectorSegmentButton
-            label="Jalan"
-            role="ROAD"
-            active={hoveredRole === "ROAD"}
-            selected={selectedRole === "ROAD"}
-            disabled={!canAccessRoad}
-            comingSoon={ROAD_COMING_SOON}
-            imgSrc="/roadinspector.png"
             onPreview={onPreviewRole}
             onPick={onPickRole}
           />
@@ -499,7 +430,6 @@ function InspectorSegmentButton({
   active,
   selected,
   disabled,
-  comingSoon,
   imgSrc,
   onPreview,
   onPick,
@@ -509,7 +439,6 @@ function InspectorSegmentButton({
   active?: boolean
   selected?: boolean
   disabled?: boolean
-  comingSoon?: boolean
   imgSrc: string
   onPreview: (role: ActiveRole | null) => void
   onPick: (role: ActiveRole) => void
@@ -556,28 +485,22 @@ function InspectorSegmentButton({
 
       <div className="relative">
         <div
-          className={`relative h-[100px] overflow-hidden rounded-2xl bg-black/10 ${imageRing}`}
+          className={`relative h-[120px] overflow-hidden rounded-2xl bg-black/10 ${imageRing}`}
         >
           <img
             src={imgSrc}
             alt={label}
-            className={`h-full w-full object-contain ${disabled ? "grayscale" : ""}`}
+            className={`h-full w-full object-contain ${
+              disabled ? "grayscale" : ""
+            }`}
             draggable={false}
           />
 
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-black/18 to-transparent" />
 
-          {comingSoon && (
-            <div className="absolute left-2 top-2 z-[2]">
-              <span className="relative overflow-hidden rounded-md border border-amber-300/40 bg-amber-400/10 px-1.5 py-[2px] text-[8px] font-extrabold">
-                <span className="role-shimmer-text">SEGERA HADIR</span>
-              </span>
-            </div>
-          )}
-
-          <div className="absolute inset-x-0 bottom-0 z-[2] flex items-end justify-between gap-2 p-2">
+          <div className="absolute inset-x-0 bottom-0 z-[2] flex items-end justify-between gap-2 p-3">
             <div
-              className={`text-[16px] font-extrabold leading-none sm:text-[17px] ${
+              className={`text-[18px] font-extrabold leading-none sm:text-[19px] ${
                 disabled ? "text-white/80" : "text-white"
               }`}
             >
@@ -635,13 +558,13 @@ function RoleCard({
       ? "border-[#22A745]/60 bg-white/18 shadow-[0_0_28px_rgba(34,167,69,0.18)]"
       : "border-white/20 bg-white/12 hover:border-[#22A745]/60 hover:bg-white/16 hover:shadow-[0_0_28px_rgba(34,167,69,0.14)]"
 
-  const imageRing = active || selected
-    ? "ring-2 ring-[#22A745]/55"
-    : "ring-1 ring-white/20"
+  const imageRing =
+    active || selected ? "ring-2 ring-[#22A745]/55" : "ring-1 ring-white/20"
 
-  const badgeState = active || selected
-    ? "border-[#22A745]/55 bg-[#22A745]/22 text-white"
-    : "border-white/20 bg-white/10 text-white/90"
+  const badgeState =
+    active || selected
+      ? "border-[#22A745]/55 bg-[#22A745]/22 text-white"
+      : "border-white/20 bg-white/10 text-white/90"
 
   return (
     <motion.button
@@ -667,7 +590,9 @@ function RoleCard({
             <img
               src={imgSrc}
               alt={title}
-              className={`h-full w-full object-cover ${disabled ? "grayscale" : ""}`}
+              className={`h-full w-full object-cover ${
+                disabled ? "grayscale" : ""
+              }`}
               draggable={false}
             />
           ) : (
@@ -677,6 +602,7 @@ function RoleCard({
               </div>
             </div>
           )}
+
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
         </div>
 
@@ -686,6 +612,7 @@ function RoleCard({
               <div className="text-[15px] font-extrabold leading-tight text-white md:text-base">
                 {title}
               </div>
+
               <div className="mt-1 text-[13px] leading-relaxed text-white/90">
                 {desc}
               </div>
