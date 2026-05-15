@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 
 type ActiveRole = "FRONT" | "PJA" | "EVALUATOR"
-type AccountRole = "USER" | "ADMIN"
-type OperationalAccess = "NONE" | "FIELD" | "PJA"
+type AccountRole = "USER" | "ADMIN" | "admin" | "super_admin"
+type OperationalAccess = "NONE" | "FIELD" | "PJA" | "ALL"
 
 const LS_KEY = "mt_session_v1"
 
@@ -58,16 +58,26 @@ export default function SelectRole() {
   const accountRole = session?.accountRole
   const operationalAccess = session?.operationalAccess ?? "NONE"
 
-  const isAdminAccount = accountRole === "ADMIN"
+const normalizedAccountRole = String(accountRole || "").toUpperCase()
+const normalizedOperationalAccess = String(operationalAccess || "NONE").toUpperCase()
 
-  const canAccessFront =
-    isAdminAccount ||
-    operationalAccess === "FIELD" ||
-    operationalAccess === "PJA"
+const isAdminAccount =
+  normalizedAccountRole === "ADMIN" ||
+  normalizedAccountRole === "SUPER_ADMIN"
 
-  const canAccessPja = isAdminAccount || operationalAccess === "PJA"
+const hasAllAccess =
+  isAdminAccount || normalizedOperationalAccess === "ALL"
 
-  const canAccessEvaluator = isAdminAccount
+const canAccessFront =
+  hasAllAccess ||
+  normalizedOperationalAccess === "FIELD" ||
+  normalizedOperationalAccess === "PJA"
+
+const canAccessPja =
+  hasAllAccess ||
+  normalizedOperationalAccess === "PJA"
+
+const canAccessEvaluator = hasAllAccess
 
   const hasAnyOperationalAccess =
     canAccessFront || canAccessPja || canAccessEvaluator
@@ -163,9 +173,9 @@ export default function SelectRole() {
                   <div className="absolute -left-5 top-1 hidden h-24 w-1 rounded-full bg-gradient-to-b from-buma-green via-buma-green/70 to-transparent lg:block" />
 
                   <h1 className="text-[36px] font-extrabold leading-[1.05] tracking-tight text-white xl:text-[42px]">
-                    Monitoring
+                    Tinggi Jenjang
                     <br className="hidden lg:block" />
-                    <span className="text-buma-green">Tinggi Jenjang</span>
+                    <span className="text-buma-green">Space</span>
                   </h1>
 
                   <p className="mt-3 max-w-md text-sm leading-relaxed text-white/85 xl:text-base">
@@ -223,15 +233,15 @@ export default function SelectRole() {
                         {username}
                       </div>
 
-                      {isAdminAccount ? (
-                        <span className="inline-flex rounded-full border border-buma-green/35 bg-buma-green/15 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
-                          ADMIN
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
-                          {operationalAccess}
-                        </span>
-                      )}
+{hasAllAccess ? (
+  <span className="inline-flex rounded-full border border-buma-green/35 bg-buma-green/15 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+    ALL
+  </span>
+) : (
+  <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
+    {normalizedOperationalAccess}
+  </span>
+)}
                     </div>
                   </div>
 
