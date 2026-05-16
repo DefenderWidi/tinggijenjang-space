@@ -26,12 +26,12 @@ function getActiveSiteFromSession(): SiteCode {
     const session = JSON.parse(raw)
     return normalizeSite(
       session?.activeSite ||
-        session?.selectedSite ||
-        session?.workspaceSite ||
-        session?.site ||
-        session?.siteCode ||
-        session?.area ||
-        session?.mineSite
+      session?.selectedSite ||
+      session?.workspaceSite ||
+      session?.site ||
+      session?.siteCode ||
+      session?.area ||
+      session?.mineSite
     )
   } catch {
     return "LAT"
@@ -154,31 +154,6 @@ type Shift = "DAY" | "NIGHT"
 
 type BadgeRect = { x: number; y: number; w: number; h: number }
 
-const FRONT_OPTIONS = [
-  "B3610",
-  "B3608",
-  "B3606",
-  "B3605",
-  "S3604",
-  "S3603",
-  "S3602",
-  "S3601",
-  "S4006",
-  "S4004",
-  "B2510",
-  "S2503",
-  "S2501",
-  "B2048",
-  "B2045",
-  "B2042",
-  "B2040",
-  "B2041",
-  "B2036",
-  "B2020",
-  "B2019",
-  "B2012",
-] as const
-
 export default function Measure() {
   const activeSite = useMemo(() => getActiveSiteFromSession(), [])
 
@@ -217,7 +192,7 @@ export default function Measure() {
 
   // shift time (pelaksanaan) + shift (DAY/NIGHT)
   const [shift, setShift] = useState<"" | Shift>("")
-  const [shiftTime, setShiftTime] = useState< "" | "FASE_1" | "FASE_2" | "FASE_3" | "FASE_4">("")
+  const [shiftTime, setShiftTime] = useState<"" | "FASE_1" | "FASE_2" | "FASE_3" | "FASE_4">("")
 
   const [pixelPerMeter, setPixelPerMeter] = useState<number | null>(null)
   const [referenceLine, setReferenceLine] = useState<Line | null>(null)
@@ -258,19 +233,19 @@ export default function Measure() {
   })
 
   // ======= Helpers =======
-function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
-  const canvas = canvasRef.current
-  if (!canvas) return { x: 0, y: 0 }
+  function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
 
-  const r = canvas.getBoundingClientRect()
-  const mx = e.clientX - r.left
-  const my = e.clientY - r.top
+    const r = canvas.getBoundingClientRect()
+    const mx = e.clientX - r.left
+    const my = e.clientY - r.top
 
-  return {
-    x: (mx * canvas.width) / r.width,
-    y: (my * canvas.height) / r.height,
+    return {
+      x: (mx * canvas.width) / r.width,
+      y: (my * canvas.height) / r.height,
+    }
   }
-}
 
   function applyOrientation(p: Pt, anchor?: Pt): Pt {
     if (!anchor) return p
@@ -334,93 +309,93 @@ function getMouse(e: React.MouseEvent<HTMLCanvasElement, MouseEvent>): Pt {
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
 
-// line glow - halus, cuma bantu kontras
-ctx.strokeStyle = tone === "ref"
-  ? "rgba(22,163,74,.12)"
-  : danger
-    ? "rgba(220,38,38,.12)"
-    : "rgba(239,68,68,.12)"
-ctx.lineWidth = 4.8
-ctx.beginPath()
-ctx.moveTo(a.x, a.y)
-ctx.lineTo(b.x, b.y)
-ctx.stroke()
+    // line glow - halus, cuma bantu kontras
+    ctx.strokeStyle = tone === "ref"
+      ? "rgba(22,163,74,.12)"
+      : danger
+        ? "rgba(220,38,38,.12)"
+        : "rgba(239,68,68,.12)"
+    ctx.lineWidth = 4.8
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
 
-// line shadow / outline gelap tipis biar tetap kebaca di background terang
-ctx.strokeStyle = "rgba(0,0,0,.28)"
-ctx.lineWidth = 3.2
-ctx.beginPath()
-ctx.moveTo(a.x, a.y)
-ctx.lineTo(b.x, b.y)
-ctx.stroke()
+    // line shadow / outline gelap tipis biar tetap kebaca di background terang
+    ctx.strokeStyle = "rgba(0,0,0,.28)"
+    ctx.lineWidth = 3.2
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
 
-// line highlight tipis biar muncul di area gelap / kabut
-ctx.strokeStyle = "rgba(255,255,255,.38)"
-ctx.lineWidth = 2.4
-ctx.beginPath()
-ctx.moveTo(a.x, a.y)
-ctx.lineTo(b.x, b.y)
-ctx.stroke()
+    // line highlight tipis biar muncul di area gelap / kabut
+    ctx.strokeStyle = "rgba(255,255,255,.38)"
+    ctx.lineWidth = 2.4
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
 
-// line core - tetap ramping tapi jelas
-ctx.strokeStyle = colors.core
-ctx.lineWidth = 2.6
-ctx.beginPath()
-ctx.moveTo(a.x, a.y)
-ctx.lineTo(b.x, b.y)
-ctx.stroke()
+    // line core - tetap ramping tapi jelas
+    ctx.strokeStyle = colors.core
+    ctx.lineWidth = 2.6
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
 
-// endpoints - kecil, clean, tetap jelas
-drawPoint(ctx, a.x, a.y, colors.core)
-ctx.strokeStyle = "rgba(255,255,255,.92)"
-ctx.lineWidth = 1.8
-ctx.beginPath()
-ctx.arc(a.x, a.y, HIT_R + 1.3, 0, Math.PI * 2)
-ctx.stroke()
+    // endpoints - kecil, clean, tetap jelas
+    drawPoint(ctx, a.x, a.y, colors.core)
+    ctx.strokeStyle = "rgba(255,255,255,.92)"
+    ctx.lineWidth = 1.8
+    ctx.beginPath()
+    ctx.arc(a.x, a.y, HIT_R + 1.3, 0, Math.PI * 2)
+    ctx.stroke()
 
-ctx.strokeStyle = "rgba(0,0,0,.42)"
-ctx.lineWidth = 1
-ctx.beginPath()
-ctx.arc(a.x, a.y, HIT_R + 2.4, 0, Math.PI * 2)
-ctx.stroke()
+    ctx.strokeStyle = "rgba(0,0,0,.42)"
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc(a.x, a.y, HIT_R + 2.4, 0, Math.PI * 2)
+    ctx.stroke()
 
-drawPoint(ctx, b.x, b.y, colors.core)
-ctx.strokeStyle = "rgba(255,255,255,.92)"
-ctx.lineWidth = 1.8
-ctx.beginPath()
-ctx.arc(b.x, b.y, HIT_R + 1.3, 0, Math.PI * 2)
-ctx.stroke()
+    drawPoint(ctx, b.x, b.y, colors.core)
+    ctx.strokeStyle = "rgba(255,255,255,.92)"
+    ctx.lineWidth = 1.8
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, HIT_R + 1.3, 0, Math.PI * 2)
+    ctx.stroke()
 
-ctx.strokeStyle = "rgba(0,0,0,.42)"
-ctx.lineWidth = 1
-ctx.beginPath()
-ctx.arc(b.x, b.y, HIT_R + 2.4, 0, Math.PI * 2)
-ctx.stroke()
+    ctx.strokeStyle = "rgba(0,0,0,.42)"
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, HIT_R + 2.4, 0, Math.PI * 2)
+    ctx.stroke()
 
-const cleanText = text.replace(/\s*m$/i, "m")
-const valueNum = cleanText.replace(/m$/i, "")
-const valueUnit = "m"
+    const cleanText = text.replace(/\s*m$/i, "m")
+    const valueNum = cleanText.replace(/m$/i, "")
+    const valueUnit = "m"
 
-ctx.font = "900 9.4px Arial"
-const tagW = ctx.measureText(label).width
+    ctx.font = "900 9.4px Arial"
+    const tagW = ctx.measureText(label).width
 
-// ukur angka utama dengan font lebih besar
-ctx.font = "900 11.8px Arial"
-const numW = ctx.measureText(valueNum).width
+    // ukur angka utama dengan font lebih besar
+    ctx.font = "900 11.8px Arial"
+    const numW = ctx.measureText(valueNum).width
 
-// ukur huruf m dengan font lebih kecil
-ctx.font = "900 8.8px Arial"
-const unitW = ctx.measureText(valueUnit).width
+    // ukur huruf m dengan font lebih kecil
+    ctx.font = "900 8.8px Arial"
+    const unitW = ctx.measureText(valueUnit).width
 
-const valueGap = 1.5
-const txtW = numW + valueGap + unitW
+    const valueGap = 1.5
+    const txtW = numW + valueGap + unitW
 
-const chipW = Math.max(14, tagW + 6)
-const gap = 4
-const textPadLeft = 5
-const textPadRight = 9
-const w = chipW + gap + txtW + textPadLeft + textPadRight + 6
-const h = 17
+    const chipW = Math.max(14, tagW + 6)
+    const gap = 4
+    const textPadLeft = 5
+    const textPadRight = 9
+    const w = chipW + gap + txtW + textPadLeft + textPadRight + 6
+    const h = 17
 
     const topPt = a.y <= b.y ? a : b
     const bottomPt = a.y > b.y ? a : b
@@ -429,8 +404,8 @@ const h = 17
     let bx = mx - w / 2
     bx = Math.max(8, Math.min(bx, ctx.canvas.width - w - 8))
 
-const safeGap = 8
-const laneStep = h + 4
+    const safeGap = 8
+    const laneStep = h + 4
 
     let by = topPt.y - h - safeGap
     let placed = false
@@ -493,60 +468,60 @@ const laneStep = h + 4
     ctx.setLineDash([])
     ctx.restore()
 
-// outer badge - transparan gelap, tidak terlalu nutup background
-ctx.fillStyle = "rgba(18,22,30,.26)"
-ctx.strokeStyle = danger ? "rgba(248,113,113,.50)" : "rgba(255,255,255,.16)"
-ctx.lineWidth = 0.8
-roundRect(ctx, bx, by, w, h, 999, true, true)
+    // outer badge - transparan gelap, tidak terlalu nutup background
+    ctx.fillStyle = "rgba(18,22,30,.26)"
+    ctx.strokeStyle = danger ? "rgba(248,113,113,.50)" : "rgba(255,255,255,.16)"
+    ctx.lineWidth = 0.8
+    roundRect(ctx, bx, by, w, h, 999, true, true)
 
-// colored mini label chip - dibikin lebih pekat / lebih gelap biar tulisan kuning kontras
-ctx.fillStyle =
-  tone === "ref"
-    ? "rgba(21,128,61,.84)"      // hijau lebih pekat
-    : danger
-      ? "rgba(185,28,28,.84)"    // merah lebih pekat
-      : "rgba(194,65,12,.84)"    // oranye tua biar kuning lebih kelihatan
-roundRect(ctx, bx + 3, by + 3, chipW, h - 6, 999, true, false)
+    // colored mini label chip - dibikin lebih pekat / lebih gelap biar tulisan kuning kontras
+    ctx.fillStyle =
+      tone === "ref"
+        ? "rgba(21,128,61,.84)"      // hijau lebih pekat
+        : danger
+          ? "rgba(185,28,28,.84)"    // merah lebih pekat
+          : "rgba(194,65,12,.84)"    // oranye tua biar kuning lebih kelihatan
+    roundRect(ctx, bx + 3, by + 3, chipW, h - 6, 999, true, false)
 
-// label text dengan outline lebih tebal
-ctx.font = "900 9.4px Arial"
-ctx.textBaseline = "middle"
-ctx.lineJoin = "round"
+    // label text dengan outline lebih tebal
+    ctx.font = "900 9.4px Arial"
+    ctx.textBaseline = "middle"
+    ctx.lineJoin = "round"
 
-const labelX = bx + 3 + (chipW - tagW) / 2
-const labelY = by + h / 2 + 0.35
+    const labelX = bx + 3 + (chipW - tagW) / 2
+    const labelY = by + h / 2 + 0.35
 
-ctx.strokeStyle = "rgba(0,0,0,.95)"
-ctx.lineWidth = 3
-ctx.strokeText(label, labelX, labelY)
+    ctx.strokeStyle = "rgba(0,0,0,.95)"
+    ctx.lineWidth = 3
+    ctx.strokeText(label, labelX, labelY)
 
-ctx.fillStyle = "#FDE047"
-ctx.fillText(label, labelX, labelY)
+    ctx.fillStyle = "#FDE047"
+    ctx.fillText(label, labelX, labelY)
 
-// value text: angka besar, "m" lebih kecil
-const textX = bx + 3 + chipW + gap + textPadLeft
-const textY = by + h / 2 + 0.35
+    // value text: angka besar, "m" lebih kecil
+    const textX = bx + 3 + chipW + gap + textPadLeft
+    const textY = by + h / 2 + 0.35
 
-// angka utama
-ctx.font = "900 11.8px Arial"
-ctx.strokeStyle = "rgba(0,0,0,.98)"
-ctx.lineWidth = 3.6
-ctx.strokeText(valueNum, textX, textY)
+    // angka utama
+    ctx.font = "900 11.8px Arial"
+    ctx.strokeStyle = "rgba(0,0,0,.98)"
+    ctx.lineWidth = 3.6
+    ctx.strokeText(valueNum, textX, textY)
 
-ctx.fillStyle = "#FDE047"
-ctx.fillText(valueNum, textX, textY)
+    ctx.fillStyle = "#FDE047"
+    ctx.fillText(valueNum, textX, textY)
 
-// huruf m kecil
-const numTextW = ctx.measureText(valueNum).width
-const unitX = textX + numTextW + 1.5
+    // huruf m kecil
+    const numTextW = ctx.measureText(valueNum).width
+    const unitX = textX + numTextW + 1.5
 
-ctx.font = "900 8.8px Arial"
-ctx.strokeStyle = "rgba(0,0,0,.95)"
-ctx.lineWidth = 2.4
-ctx.strokeText(valueUnit, unitX, textY)
+    ctx.font = "900 8.8px Arial"
+    ctx.strokeStyle = "rgba(0,0,0,.95)"
+    ctx.lineWidth = 2.4
+    ctx.strokeText(valueUnit, unitX, textY)
 
-ctx.fillStyle = "#FDE047"
-ctx.fillText(valueUnit, unitX, textY)
+    ctx.fillStyle = "#FDE047"
+    ctx.fillText(valueUnit, unitX, textY)
 
     ctx.restore()
   }
@@ -1120,18 +1095,18 @@ ctx.fillText(valueUnit, unitX, textY)
         </div>
       )}
 
-<div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-  <div>
-    <div className="text-2xl font-extrabold tracking-tight text-buma-text">
-      Workspace Pengukuran
-    </div>
-  </div>
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-2xl font-extrabold tracking-tight text-buma-text">
+            Workspace Pengukuran
+          </div>
+        </div>
 
-  <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-buma-green/25 bg-buma-green/10 px-3 py-2 text-xs font-extrabold text-buma-green">
-    <span className="text-buma-muted">Site Aktif</span>
-    <span>{activeSite}</span>
-  </div>
-</div>
+        <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-buma-green/25 bg-buma-green/10 px-3 py-2 text-xs font-extrabold text-buma-green">
+          <span className="text-buma-muted">Site Aktif</span>
+          <span>{activeSite}</span>
+        </div>
+      </div>
 
       {/* Main layout */}
       <div className="grid gap-4 lg:grid-cols-[350px_1fr]">
@@ -1168,25 +1143,20 @@ ctx.fillText(valueUnit, unitX, textY)
     Front (Unit Loader)<span className="text-buma-orange">*</span>
   </label>
 
- <select
+  <input
+    type="text"
     value={areaId}
     onChange={(e) => {
-      setAreaId(e.target.value)
+      setAreaId(e.target.value.toUpperCase())
       setFormError(false)
     }}
-    className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${
+    placeholder="Masukkan area / front, contoh: S4004"
+    className={`w-full rounded-xl border bg-white px-3 py-2 text-sm text-buma-text placeholder:text-buma-muted/60 outline-none transition ${
       formError && !areaId
         ? "border-red-500"
-        : "border-buma-border focus:border-buma-green/60"
+        : "border-buma-border focus:border-buma-green/60 focus:ring-2 focus:ring-buma-green/15"
     }`}
-  >
-    <option value="">— Pilih area / front —</option>
-    {FRONT_OPTIONS.map((front) => (
-      <option key={front} value={front}>
-        {front}
-      </option>
-    ))}
-  </select>
+  />
 </div>
 
               {/* NEW: Shift DAY/NIGHT */}
@@ -1212,33 +1182,32 @@ ctx.fillText(valueUnit, unitX, textY)
                 </select>
               </div>
 
-{/* pelaksanaan = FASE_1/FASE_2/FASE_3/FASE_4 */}
-<div className="grid gap-1">
-  <label className="text-[11px] font-semibold text-buma-muted">
-    Fase <span className="text-buma-orange">*</span>
-  </label>
+              {/* pelaksanaan = FASE_1/FASE_2/FASE_3/FASE_4 */}
+              <div className="grid gap-1">
+                <label className="text-[11px] font-semibold text-buma-muted">
+                  Fase <span className="text-buma-orange">*</span>
+                </label>
 
-  <select
-    value={shiftTime}
-    onChange={(e) => {
-      setShiftTime(
-        e.target.value as "FASE_1" | "FASE_2" | "FASE_3" | "FASE_4"
-      )
-      setFormError(false)
-    }}
-    className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${
-      formError && !shiftTime
-        ? "border-red-500"
-        : "border-buma-border focus:border-buma-green/60"
-    }`}
-  >
-    <option value="">— Pilih fase —</option>
-    <option value="FASE_1">Fase 1</option>
-    <option value="FASE_2">Fase 2</option>
-    <option value="FASE_3">Fase 3</option>
-    <option value="FASE_4">Fase 4</option>
-  </select>
-</div>
+                <select
+                  value={shiftTime}
+                  onChange={(e) => {
+                    setShiftTime(
+                      e.target.value as "FASE_1" | "FASE_2" | "FASE_3" | "FASE_4"
+                    )
+                    setFormError(false)
+                  }}
+                  className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${formError && !shiftTime
+                      ? "border-red-500"
+                      : "border-buma-border focus:border-buma-green/60"
+                    }`}
+                >
+                  <option value="">— Pilih fase —</option>
+                  <option value="FASE_1">Fase 1</option>
+                  <option value="FASE_2">Fase 2</option>
+                  <option value="FASE_3">Fase 3</option>
+                  <option value="FASE_4">Fase 4</option>
+                </select>
+              </div>
 
               <input
                 ref={fileRef}
@@ -1431,43 +1400,41 @@ ctx.fillText(valueUnit, unitX, textY)
                 </div>
               )}
             </div>
-                <div>
-                <label className="text-[11px] font-semibold text-buma-muted mt-4 block">
-                  Apakah loading 45 derajat? <span className="text-buma-orange">*</span>
-                </label>
+            <div>
+              <label className="text-[11px] font-semibold text-buma-muted mt-4 block">
+                Apakah loading 45 derajat? <span className="text-buma-orange">*</span>
+              </label>
 
-                <div className="mt-1 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoading45Ok(true)
-                      setMeasureError(false)
-                    }}
-                    className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${
-                      loading45Ok === true
-                        ? "border-buma-green/50 bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
-                        : "border-buma-border bg-white text-buma-text hover:bg-buma-green/5"
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoading45Ok(true)
+                    setMeasureError(false)
+                  }}
+                  className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${loading45Ok === true
+                      ? "border-buma-green/50 bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
+                      : "border-buma-border bg-white text-buma-text hover:bg-buma-green/5"
                     }`}
-                  >
-                    Ya
-                  </button>
+                >
+                  Ya
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoading45Ok(false)
-                      setMeasureError(false)
-                    }}
-                    className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${
-                      loading45Ok === false
-                        ? "border-red-500/50 bg-gradient-to-r from-red-600 to-red-500 text-white"
-                        : "border-buma-border bg-white text-buma-text hover:bg-red-50"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoading45Ok(false)
+                    setMeasureError(false)
+                  }}
+                  className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${loading45Ok === false
+                      ? "border-red-500/50 bg-gradient-to-r from-red-600 to-red-500 text-white"
+                      : "border-buma-border bg-white text-buma-text hover:bg-red-50"
                     }`}
-                  >
-                    Tidak
-                  </button>
-                </div>
+                >
+                  Tidak
+                </button>
               </div>
+            </div>
           </div>
         </aside>
 
@@ -1557,9 +1524,9 @@ ctx.fillText(valueUnit, unitX, textY)
                       <canvas
                         ref={canvasRef}
                         className="absolute inset-0 cursor-crosshair"
-                   style={{
-  willChange: "auto",
-}}
+                        style={{
+                          willChange: "auto",
+                        }}
                         onMouseDown={onMouseDown}
                         onMouseMove={onMouseMove}
                         onMouseUp={onMouseUp}
@@ -1629,7 +1596,7 @@ ctx.fillText(valueUnit, unitX, textY)
             {/* Bottom bar */}
             <div className="sticky bottom-0 w-full border-t border-buma-border bg-white/95 backdrop-blur">
               <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
-                                <button
+                <button
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#15803D]/20 bg-buma-blue/5 px-4 py-2.5 text-sm font-extrabold text-buma-blue shadow-soft transition-all duration-150 hover:bg-buma-blue/15 hover:border-buma-blue/40 active:scale-95 disabled:opacity-40"
                   type="button"
                   disabled={!imgSrc}
