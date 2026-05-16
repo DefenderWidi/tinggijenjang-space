@@ -69,6 +69,24 @@ function normalizeReviewStatus(value: any): ReviewStatus {
   return "VALID"
 }
 
+function toBoolOrNull(value: any): boolean | null {
+  if (value === true) return true
+  if (value === false) return false
+
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase()
+    if (s === "true" || s === "1" || s === "yes" || s === "ya") return true
+    if (s === "false" || s === "0" || s === "no" || s === "tidak") return false
+  }
+
+  if (typeof value === "number") {
+    if (value === 1) return true
+    if (value === 0) return false
+  }
+
+  return null
+}
+
 function getSiteFromBody(body: Record<string, any>): SiteCode {
   return normalizeSite(
     body?.site ??
@@ -261,6 +279,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         lines_count: Number(body?.lines_count ?? 0),
         lines_ok_count: Number(body?.lines_ok_count ?? 0),
         max_height_m: Number(body?.max_height_m ?? 0),
+        loading_45_ok: toBoolOrNull(body?.loading_45_ok ?? body?.loading45Ok),
+        ...(body?.loading_45_ok != null || body?.loading45Ok != null
+          ? { loading_45_checked_at: new Date().toISOString() }
+          : {}),
 
         // Flow baru: langsung valid agar data muncul di Dashboard Evaluator.
         reviewed_by: body?.reviewed_by ? String(body.reviewed_by) : "AUTO_DASHBOARD",

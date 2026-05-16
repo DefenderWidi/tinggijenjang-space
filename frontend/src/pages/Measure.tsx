@@ -193,6 +193,7 @@ export default function Measure() {
   const [orientation, setOrientation] = useState<
     "vertical" | "horizontal" | "free"
   >("vertical")
+  const [loading45Ok, setLoading45Ok] = useState<boolean | null>(null)
 
   const [refMeterStr, setRefMeterStr] = useState<string>("")
   const [refKey, setRefKey] = useState<RefKey | "">("")
@@ -715,6 +716,7 @@ ctx.fillText(valueUnit, unitX, textY)
         review_status: "VALID",
         reviewed_by: "AUTO_DASHBOARD",
         review_notes: "Auto-valid dari Inspector. Flow PJA dinonaktifkan.",
+        loading_45_ok: loading45Ok,
         // summary awal (akan di-update setelah upload measure)
         lines_count: 0,
         lines_ok_count: 0,
@@ -1015,6 +1017,7 @@ ctx.fillText(valueUnit, unitX, textY)
     setTempPoints([])
     setDrag(null)
     setMode("kalibrasi")
+    setLoading45Ok(null)
     setInspectionId(null)
   }
 
@@ -1034,6 +1037,13 @@ ctx.fillText(valueUnit, unitX, textY)
       setFormError(true)
       return
     }
+    if (loading45Ok === null) {
+      setMeasureError(true)
+      setSubmitStatus("error")
+      setSubmitMsg("Pilih dulu apakah loading 45 derajat: Ya atau Tidak.")
+      return
+    }
+
     if (!pixelPerMeter || measurements.length === 0) return
 
     if (!imgSrc || !imgRef.current) {
@@ -1115,9 +1125,6 @@ ctx.fillText(valueUnit, unitX, textY)
     <div className="text-2xl font-extrabold tracking-tight text-buma-text">
       Workspace Pengukuran
     </div>
-    <div className="mt-1 text-xs font-semibold text-buma-muted">
-      Flow baru: data inspector langsung masuk Dashboard Evaluator tanpa verifikasi PJA.
-    </div>
   </div>
 
   <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-buma-green/25 bg-buma-green/10 px-3 py-2 text-xs font-extrabold text-buma-green">
@@ -1127,7 +1134,7 @@ ctx.fillText(valueUnit, unitX, textY)
 </div>
 
       {/* Main layout */}
-      <div className="grid gap-4 lg:grid-cols-[390px_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[350px_1fr]">
         {/* LEFT PANEL */}
         <aside className="relative overflow-hidden rounded-2xl border border-buma-border bg-white shadow-soft">
           <div className="absolute inset-x-0 top-0 h-[4px] bg-gradient-to-r from-buma-green via-buma-blue to-buma-orange" />
@@ -1136,7 +1143,6 @@ ctx.fillText(valueUnit, unitX, textY)
             <SectionTitle no="01" title="Data Inspeksi" />
             <div className="mb-3 rounded-xl border border-buma-green/20 bg-buma-green/5 px-3 py-2 text-xs font-semibold text-buma-text">
               Site aktif: <span className="font-extrabold text-buma-green">{activeSite}</span>
-              <span className="ml-1 text-buma-muted">• langsung masuk Dashboard Evaluator</span>
             </div>
             <div className="grid gap-3">
               <div className="grid gap-1">
@@ -1376,6 +1382,48 @@ ctx.fillText(valueUnit, unitX, textY)
                 </select>
               </div>
 
+              <div>
+                <label className="text-[11px] font-semibold text-buma-muted">
+                  Apakah loading 45 derajat? <span className="text-buma-orange">*</span>
+                </label>
+
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoading45Ok(true)
+                      setMeasureError(false)
+                    }}
+                    className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${
+                      loading45Ok === true
+                        ? "border-buma-green/50 bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
+                        : "border-buma-border bg-white text-buma-text hover:bg-buma-green/5"
+                    }`}
+                  >
+                    Ya
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoading45Ok(false)
+                      setMeasureError(false)
+                    }}
+                    className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${
+                      loading45Ok === false
+                        ? "border-red-500/50 bg-gradient-to-r from-red-600 to-red-500 text-white"
+                        : "border-buma-border bg-white text-buma-text hover:bg-red-50"
+                    }`}
+                  >
+                    Tidak
+                  </button>
+                </div>
+
+                <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
+                  Jawaban ini akan langsung masuk ke Dashboard Evaluator bersama data inspeksi.
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <button
                   className={`rounded-xl px-4 py-2.5 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${refSelected && pixelPerMeter
@@ -1413,9 +1461,11 @@ ctx.fillText(valueUnit, unitX, textY)
                 </button>
               </div>
 
-              {measureError && (!refSelected || !pixelPerMeter) && (
+              {measureError && (!refSelected || !pixelPerMeter || loading45Ok === null) && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 animate-pulse">
-                  {!refSelected ? (
+                  {loading45Ok === null ? (
+                    <>⚠ Pilih dulu apakah <b>loading 45 derajat</b>: Ya atau Tidak.</>
+                  ) : !refSelected ? (
                     <>⚠ Lakukan tahap <b>kalibrasi skala</b> terlebih dahulu sebelum pengukuran.</>
                   ) : (
                     <>⚠ Lakukan <b>kalibrasi</b> dulu (klik <b>Set Points</b> lalu pilih 2 titik referensi).</>
