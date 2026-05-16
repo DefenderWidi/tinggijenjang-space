@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 
 type ActiveRole = "FRONT"
-type AccountRole = "USER" | "ADMIN" | "admin" | "super_admin" | "SUPER_ADMIN"
+type AccountRole = "USER" | "ADMIN"
 type OperationalAccess = "NONE" | "FIELD" | "PJA" | "ALL"
 type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
 
@@ -12,12 +12,10 @@ const LS_KEY = "mt_session_v1"
 type SessionData = {
   id?: string | null
   username?: string
-  accountRole?: AccountRole
-  operationalAccess?: OperationalAccess
+  accountRole?: AccountRole | string
+  operationalAccess?: OperationalAccess | string
   activeRole?: ActiveRole | null
 
-  // Field site dibuat beberapa variasi agar lebih aman
-  // kalau file lain membaca nama key yang berbeda.
   site?: SiteCode | null
   activeSite?: SiteCode | null
   selectedSite?: SiteCode | null
@@ -28,40 +26,25 @@ type SessionData = {
 
 const SITE_OPTIONS: {
   code: SiteCode
-  name: string
-  desc: string
+  label: string
 }[] = [
-  {
-    code: "LAT",
-    name: "Lati Mine Operation",
-    desc: "Workspace demo untuk area LAT.",
-  },
-  {
-    code: "IPR",
-    name: "IPR Mine Operation",
-    desc: "Workspace demo untuk area IPR.",
-  },
-  {
-    code: "SDJ",
-    name: "SDJ Mine Operation",
-    desc: "Workspace demo untuk area SDJ.",
-  },
-  {
-    code: "ADT",
-    name: "ADT Mine Operation",
-    desc: "Workspace demo untuk area ADT.",
-  },
+  { code: "LAT", label: "LAT" },
+  { code: "IPR", label: "IPR" },
+  { code: "SDJ", label: "SDJ" },
+  { code: "ADT", label: "ADT" },
 ]
+
+const SUPER_ADMIN_USERNAMES = ["MFBAB", "Q4IUM"]
+
+function normalizeText(value?: string | null) {
+  return String(value || "").trim().toUpperCase()
+}
 
 function getSession(): SessionData | null {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return null
-
-    const parsed = JSON.parse(raw) as SessionData
-    if (!parsed || typeof parsed !== "object") return null
-
-    return parsed
+    return JSON.parse(raw)
   } catch {
     return null
   }
@@ -80,141 +63,103 @@ function saveSessionMerge(patch: Partial<SessionData>) {
   )
 }
 
-function ensureDemoSession() {
-  const existing = getSession()
+function isSuperAdminUsername(username?: string | null) {
+  return SUPER_ADMIN_USERNAMES.includes(normalizeText(username))
+}
 
-  if (existing?.username) {
-    return existing
+function isAdminSession(session?: SessionData | null) {
+  const username = normalizeText(session?.username)
+  const accountRole = normalizeText(session?.accountRole)
+
+  return (
+    accountRole === "ADMIN" ||
+    accountRole === "SUPER_ADMIN" ||
+    SUPER_ADMIN_USERNAMES.includes(username)
+  )
+}
+
+function ensureDemoAccessIfNeeded(session: SessionData | null) {
+  if (!session) return null
+
+  if (isSuperAdminUsername(session.username)) {
+    const upgradedSession: SessionData = {
+      ...session,
+      accountRole: "ADMIN",
+      operationalAccess: "ALL",
+      ts: Date.now(),
+    }
+
+    localStorage.setItem(LS_KEY, JSON.stringify(upgradedSession))
+    return upgradedSession
   }
 
-  const demoSession: SessionData = {
-    id: "demo-session",
-    username: "DEMO",
-    accountRole: "ADMIN",
-    operationalAccess: "ALL",
-    activeRole: null,
-    site: null,
-    activeSite: null,
-    selectedSite: null,
-    workspaceSite: null,
-    ts: Date.now(),
-  }
-
-  localStorage.setItem(LS_KEY, JSON.stringify(demoSession))
-  return demoSession
-}
-
-function normalizeAccountRole(role?: AccountRole) {
-  return String(role || "").toUpperCase()
-}
-
-function normalizeOperationalAccess(access?: OperationalAccess) {
-  return String(access || "NONE").toUpperCase()
-}
-
-function isAdminRole(role?: AccountRole) {
-  const normalized = normalizeAccountRole(role)
-
-  return normalized === "ADMIN" || normalized === "SUPER_ADMIN"
-}
-
-function getInitialSite(session: SessionData | null): SiteCode {
-  const site =
-    session?.activeSite ||
-    session?.selectedSite ||
-    session?.workspaceSite ||
-    session?.site
-
-  if (site === "LAT" || site === "IPR" || site === "SDJ" || site === "ADT") {
-    return site
-  }
-
-  return "LAT"
+  return session
 }
 
 export default function SelectRole() {
   const nav = useNavigate()
 
-  const [session, setSession] = useState<SessionData | null>(() => getSession())
-  const [selectedSite, setSelectedSite] = useState<SiteCode>(() =>
-    getInitialSite(getSession())
-  )
   const [hoveredSite, setHoveredSite] = useState<SiteCode | null>(null)
   const [notice, setNotice] = useState("")
-
-  useEffect(() => {
-    const current = ensureDemoSession()
-    setSession(current)
-    setSelectedSite(getInitialSite(current))
-  }, [])
-
-  const username = session?.username || "DEMO"
-  const accountRole = session?.accountRole
-  const operationalAccess = session?.operationalAccess ?? "NONE"
-
-  const normalizedOperationalAccess = useMemo(
-    () => normalizeOperationalAccess(operationalAccess),
-    [operationalAccess]
+  const [session, setSession] = useState<SessionData | null>(() =>
+    ensureDemoAccessIfNeeded(getSession())
   )
 
-  const isAdminAccount = useMemo(() => isAdminRole(accountRole), [accountRole])
+  const username = session?.username
+  const operationalAccess = session?.operationalAccess ?? "NONE"
 
-  const hasAllAccess =
-    isAdminAccount || normalizedOperationalAccess === "ALL"
+  const isAdminAccount = isAdminSession(session)
 
-  const canAccessFront =
-    hasAllAccess ||
-    normalizedOperationalAccess === "FIELD" ||
-    normalizedOperationalAccess === "PJA"
+  const canAccessFront = useMemo(() => {
+    const access = normalizeText(operationalAccess)
 
-  const selectedSiteData = SITE_OPTIONS.find((site) => site.code === selectedSite)
+    return (
+      isAdminAccount ||
+      access === "FIELD" ||
+      access === "PJA" ||
+      access === "ALL"
+    )
+  }, [isAdminAccount, operationalAccess])
+
+  useEffect(() => {
+    const current = ensureDemoAccessIfNeeded(getSession())
+    setSession(current)
+
+    if (!current?.username) {
+      nav("/", { replace: true })
+    }
+  }, [nav])
 
   function handlePickSite(site: SiteCode) {
-    setSelectedSite(site)
-    setHoveredSite(null)
-    setNotice("")
-
-    saveSessionMerge({
-      site,
-      activeSite: site,
-      selectedSite: site,
-      workspaceSite: site,
-    })
-
-    setSession(getSession())
-  }
-
-  function handleOpenFront() {
     if (!canAccessFront) {
       setNotice(
-        "Akun ini belum memiliki akses ke Inspector Front. Silakan gunakan akun admin untuk demo."
+        "Akun ini belum memiliki akses ke Inspector Front. Silakan hubungi admin."
       )
       return
     }
 
     saveSessionMerge({
       activeRole: "FRONT",
-      site: selectedSite,
-      activeSite: selectedSite,
-      selectedSite,
-      workspaceSite: selectedSite,
+      site,
+      activeSite: site,
+      selectedSite: site,
+      workspaceSite: site,
     })
 
     setNotice("")
+    setHoveredSite(null)
     nav("/measure", { replace: true })
   }
 
   function handleOpenAdmin() {
     if (!isAdminAccount) {
-      setNotice("Menu Admin hanya tersedia untuk akun admin.")
+      setNotice("Pusat Admin hanya tersedia untuk akun admin.")
       return
     }
 
     saveSessionMerge({
-      site: selectedSite,
-      activeSite: selectedSite,
-      selectedSite,
-      workspaceSite: selectedSite,
+      accountRole: "ADMIN",
+      operationalAccess: "ALL",
     })
 
     setNotice("")
@@ -261,14 +206,13 @@ export default function SelectRole() {
                   <div className="absolute -left-5 top-1 hidden h-24 w-1 rounded-full bg-gradient-to-b from-buma-green via-buma-green/70 to-transparent lg:block" />
 
                   <h1 className="text-[36px] font-extrabold leading-[1.05] tracking-tight text-white xl:text-[42px]">
-                    Tinggi Jenjang
+                    Monitoring
                     <br className="hidden lg:block" />
-                    <span className="text-buma-green">Space</span>
+                    <span className="text-buma-green">Tinggi Jenjang</span>
                   </h1>
 
                   <p className="mt-3 max-w-md text-sm leading-relaxed text-white/85 xl:text-base">
-                    Pilih site dan masuk ke workspace Inspector Front untuk
-                    kebutuhan demo pengukuran tinggi jenjang.
+                    Pilih site untuk langsung masuk ke workspace pengukuran.
                   </p>
 
                   <div className="mt-6 text-xs text-white/65">
@@ -292,164 +236,122 @@ export default function SelectRole() {
                 </div>
 
                 <div className="relative">
-                  <div className="mb-5 flex items-start justify-between gap-3">
+                  <button
+                    onMouseEnter={() => setHoveredSite(null)}
+                    onMouseLeave={() => setHoveredSite(null)}
+                    onClick={() => nav("/login", { replace: true })}
+                    className="
+                      absolute left-0 top-0 z-20
+                      group inline-flex items-center justify-center gap-2
+                      rounded-xl border border-white/20 bg-white/10
+                      px-4 py-2 text-xs font-extrabold text-white/90
+                      backdrop-blur-md transition-all duration-300 ease-out
+                      hover:-translate-y-[2px] hover:border-white/35
+                      hover:bg-white/18 hover:shadow-[0_8px_20px_rgba(255,255,255,0.12)]
+                      active:translate-y-0
+                    "
+                  >
+                    ← Kembali
+                  </button>
+
+                  <div className="mb-4 flex items-start justify-between gap-3 pt-12">
                     <div className="min-w-0">
                       <div className="text-xl font-extrabold text-white md:text-2xl">
-                        Pilih Site Demo
+                        Pilih Site
                       </div>
-                      <div className="mt-1 text-xs font-medium leading-relaxed text-white/70 md:text-sm">
-                        Site terpilih akan disimpan ke session dan digunakan saat
-                        masuk ke halaman pengukuran.
+                      <div className="mt-1 text-xs font-semibold leading-relaxed text-white/75 md:text-sm">
+                        Klik salah satu site untuk langsung masuk ke halaman
+                        pengukuran.
                       </div>
                     </div>
 
                     <div className="flex shrink-0 flex-col items-end gap-1.5 pt-1 text-right text-[11px] leading-none text-white/85">
-                      <div className="max-w-[140px] truncate font-semibold text-white/95">
+                      <div className="max-w-[120px] truncate font-semibold text-white/95">
                         {username}
                       </div>
 
-                      {hasAllAccess ? (
+                      {isAdminAccount ? (
                         <span className="inline-flex rounded-full border border-buma-green/35 bg-buma-green/15 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
                           ADMIN
                         </span>
                       ) : (
                         <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
-                          {normalizedOperationalAccess}
+                          {operationalAccess}
                         </span>
                       )}
                     </div>
                   </div>
 
                   {notice ? (
-                    <div className="mb-4 rounded-2xl border border-amber-200/25 bg-amber-400/10 px-4 py-3 text-[12px] font-semibold leading-relaxed text-amber-50">
+                    <div className="mb-4 rounded-2xl border border-amber-300/30 bg-amber-400/15 px-4 py-3 text-[12px] font-semibold leading-relaxed text-amber-50">
                       {notice}
                     </div>
                   ) : null}
 
-                  <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    {SITE_OPTIONS.map((site) => {
-                      const active = selectedSite === site.code
-                      const hovered = hoveredSite === site.code
-
-                      return (
-                        <button
-                          key={site.code}
-                          type="button"
-                          onMouseEnter={() => setHoveredSite(site.code)}
-                          onMouseLeave={() => setHoveredSite(null)}
-                          onClick={() => handlePickSite(site.code)}
-                          className={`
-                            group relative overflow-hidden rounded-2xl border p-4 text-left
-                            backdrop-blur-xl transition-all duration-300 ease-out
-                            ${
-                              active
-                                ? "border-buma-green/70 bg-buma-green/20 shadow-[0_0_0_1px_rgba(54,179,126,0.25),0_18px_40px_rgba(0,0,0,0.18)]"
-                                : "border-white/15 bg-white/10 hover:-translate-y-[2px] hover:border-buma-green/45 hover:bg-white/15 hover:shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
-                            }
-                          `}
-                        >
-                          <div
-                            className={`
-                              pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300
-                              ${
-                                active || hovered
-                                  ? "opacity-100 bg-gradient-to-br from-buma-green/18 via-transparent to-white/5"
-                                  : ""
-                              }
-                            `}
-                          />
-
-                          <div className="relative">
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                              <div
-                                className={`
-                                  flex h-11 w-11 items-center justify-center rounded-2xl
-                                  border text-sm font-black tracking-wide
-                                  ${
-                                    active
-                                      ? "border-buma-green/60 bg-buma-green/25 text-white"
-                                      : "border-white/15 bg-white/10 text-white/90"
-                                  }
-                                `}
-                              >
-                                {site.code}
-                              </div>
-
-                              {active ? (
-                                <span className="rounded-full border border-buma-green/45 bg-buma-green/20 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white">
-                                  Dipilih
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <div className="text-sm font-extrabold text-white">
-                              {site.name}
-                            </div>
-                            <div className="mt-1 text-xs leading-relaxed text-white/68">
-                              {site.desc}
-                            </div>
-                          </div>
-                        </button>
-                      )
-                    })}
+                  <div className="grid gap-3">
+                    <InspectorSiteCard
+                      hoveredSite={hoveredSite}
+                      onHoverSite={setHoveredSite}
+                      onClearHover={() => setHoveredSite(null)}
+                      onPickSite={handlePickSite}
+                      disabled={!canAccessFront}
+                    />
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                    <button
-                      type="button"
-                      onClick={handleOpenFront}
-                      className="
-                        group relative overflow-hidden rounded-2xl border border-buma-green/45
-                        bg-buma-green/20 px-5 py-4 text-left backdrop-blur-xl
-                        transition-all duration-300 ease-out
-                        hover:-translate-y-[2px] hover:border-buma-green/75
-                        hover:bg-buma-green/28 hover:shadow-[0_18px_40px_rgba(0,0,0,0.22)]
-                        active:translate-y-0
-                      "
-                    >
-                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-buma-green/20 via-transparent to-white/5 opacity-80" />
-
-                      <div className="relative flex items-center justify-between gap-4">
-                        <div>
-                          <div className="text-base font-black text-white md:text-lg">
-                            Masuk Inspector Front
-                          </div>
-                          <div className="mt-1 text-xs font-medium leading-relaxed text-white/75 md:text-sm">
-                            Site aktif:{" "}
-                            <span className="font-extrabold text-white">
-                              {selectedSiteData?.code} - {selectedSiteData?.name}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-xl font-black text-white transition-transform duration-300 group-hover:translate-x-1">
-                          →
-                        </div>
-                      </div>
-                    </button>
-
-                    {isAdminAccount ? (
-                      <button
+                  <div className="mt-4 space-y-3">
+                    {isAdminAccount && (
+                      <motion.button
                         type="button"
+                        onMouseEnter={() => setHoveredSite(null)}
+                        onMouseLeave={() => setHoveredSite(null)}
                         onClick={handleOpenAdmin}
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.985 }}
                         className="
-                          rounded-2xl border border-white/20 bg-white/10 px-5 py-4
-                          text-sm font-extrabold text-white/95 backdrop-blur-xl
-                          transition-all duration-300 ease-out
-                          hover:-translate-y-[2px] hover:border-buma-orange/55
-                          hover:bg-buma-orange/15 hover:shadow-[0_18px_40px_rgba(0,0,0,0.18)]
-                          active:translate-y-0
+                          group relative w-full overflow-hidden
+                          rounded-2xl border border-buma-green/35
+                          bg-white/10 px-3 py-2.5 text-left backdrop-blur-xl
+                          transition-all duration-300
+                          hover:border-buma-green/55 hover:bg-white/16
+                          hover:shadow-[0_8px_20px_rgba(34,167,69,0.18)]
                         "
                       >
-                        Admin
-                      </button>
-                    ) : null}
-                  </div>
+                        <div className="relative flex items-center gap-3">
+                          <div className="flex h-8 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="24"
+                              height="24"
+                              viewBox="0 0 24 24"
+                              className="text-white"
+                            >
+                              <path
+                                fill="currentColor"
+                                d="M12 23C6.443 21.765 2 16.522 2 11V5l10-4l10 4v6c0 5.524-4.443 10.765-10 12M4 6v5a10.58 10.58 0 0 0 8 10a10.58 10.58 0 0 0 8-10V6l-8-3Z"
+                              />
+                              <circle
+                                cx="12"
+                                cy="8.5"
+                                r="2.5"
+                                fill="currentColor"
+                              />
+                              <path
+                                fill="currentColor"
+                                d="M7 15a5.78 5.78 0 0 0 5 3a5.78 5.78 0 0 0 5-3c-.025-1.896-3.342-3-5-3c-1.667 0-4.975 1.104-5 3"
+                              />
+                            </svg>
+                          </div>
 
-                  <div className="mt-5 rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-[11px] leading-relaxed text-white/58">
-                    Mode demo sementara: pilihan Verifikasi PJA dan Evaluator
-                    disembunyikan. Admin tetap tersedia untuk akun dengan akses
-                    admin.
+                          <div className="flex-1 text-sm font-extrabold text-white">
+                            Pusat Admin
+                          </div>
+
+                          <div className="rounded-lg border border-buma-green/40 bg-buma-green/18 px-2 py-1 text-[10px] font-extrabold tracking-widest text-white">
+                            ADMIN
+                          </div>
+                        </div>
+                      </motion.button>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -458,5 +360,139 @@ export default function SelectRole() {
         </div>
       </div>
     </div>
+  )
+}
+
+function InspectorSiteCard({
+  hoveredSite,
+  onHoverSite,
+  onClearHover,
+  onPickSite,
+  disabled,
+}: {
+  hoveredSite: SiteCode | null
+  onHoverSite: (site: SiteCode | null) => void
+  onClearHover: () => void
+  onPickSite: (site: SiteCode) => void
+  disabled?: boolean
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      onMouseLeave={onClearHover}
+      className="
+        relative overflow-hidden rounded-3xl border border-white/20 bg-white/12 p-3
+        backdrop-blur-xl transition-all duration-300
+      "
+    >
+      <div className="pointer-events-none absolute inset-0 opacity-70">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/14 via-transparent to-transparent" />
+        <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+      </div>
+
+      <div className="relative">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[16px] font-extrabold leading-tight text-white">
+              Inspector
+            </div>
+          </div>
+
+          <div className="hidden rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-[10px] font-extrabold tracking-widest text-white/85 sm:block">
+            FRONT
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {SITE_OPTIONS.map((site) => (
+            <SiteButton
+              key={site.code}
+              site={site}
+              active={hoveredSite === site.code}
+              disabled={disabled}
+              onHover={() => !disabled && onHoverSite(site.code)}
+              onLeave={() => onHoverSite(null)}
+              onClick={() => onPickSite(site.code)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-0 h-[2px] ${
+          hoveredSite
+            ? "bg-gradient-to-r from-transparent via-[#22A745]/70 to-transparent"
+            : "bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-60"
+        }`}
+      />
+    </motion.div>
+  )
+}
+
+function SiteButton({
+  site,
+  active,
+  disabled,
+  onHover,
+  onLeave,
+  onClick,
+}: {
+  site: {
+    code: SiteCode
+    label: string
+  }
+  active?: boolean
+  disabled?: boolean
+  onHover: () => void
+  onLeave: () => void
+  onClick: () => void
+}) {
+  return (
+    <motion.button
+      type="button"
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onFocus={onHover}
+      onBlur={onLeave}
+      onClick={onClick}
+      whileHover={disabled ? undefined : { scale: 1.02 }}
+      whileTap={disabled ? undefined : { scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 260, damping: 18 }}
+      className={`
+        relative h-[104px] overflow-hidden rounded-2xl border text-center
+        backdrop-blur-xl transition-all duration-300
+        ${
+          disabled
+            ? "cursor-not-allowed border-white/10 bg-white/5 opacity-60"
+            : active
+              ? "border-[#22A745]/70 bg-[#22A745]/22 shadow-[0_0_26px_rgba(34,167,69,0.18)]"
+              : "border-white/18 bg-white/10 hover:border-[#22A745]/60 hover:bg-white/16 hover:shadow-[0_0_26px_rgba(34,167,69,0.14)]"
+        }
+      `}
+    >
+      <div className="pointer-events-none absolute inset-0 opacity-70">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/16 via-transparent to-transparent" />
+      </div>
+
+      <div className="relative flex h-full flex-col items-center justify-center gap-2">
+        <div className="text-[24px] font-black tracking-wide text-white">
+          {site.label}
+        </div>
+
+        <div className="rounded-full border border-white/18 bg-black/20 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-white/75">
+          Masuk
+        </div>
+      </div>
+
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-0 h-[2px] ${
+          active
+            ? "bg-gradient-to-r from-transparent via-[#22A745]/80 to-transparent"
+            : "bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-60"
+        }`}
+      />
+    </motion.button>
   )
 }
