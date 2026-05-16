@@ -461,7 +461,7 @@ function SiteButton({
       whileTap={disabled ? undefined : { scale: 0.98 }}
       transition={{ type: "spring", stiffness: 260, damping: 18 }}
       className={`
-        relative h-[104px] overflow-hidden rounded-2xl border text-center
+        relative h-[132px] overflow-hidden rounded-2xl border text-center
         backdrop-blur-xl transition-all duration-300
         ${
           disabled
@@ -476,12 +476,35 @@ function SiteButton({
         <div className="absolute inset-0 bg-gradient-to-br from-white/16 via-transparent to-transparent" />
       </div>
 
-      <div className="relative flex h-full flex-col items-center justify-center gap-2">
-        <div className="text-[24px] font-black tracking-wide text-white">
+      <div className="relative flex h-full flex-col items-center justify-center gap-2 px-2">
+        <div
+          className={`
+            flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border
+            transition-all duration-300
+            ${
+              active
+                ? "border-[#22A745]/60 bg-[#22A745]/18"
+                : "border-white/18 bg-white/10"
+            }
+          `}
+        >
+          <SiteIcon />
+        </div>
+
+        <div className="text-[22px] font-black leading-none tracking-wide text-white">
           {site.label}
         </div>
 
-        <div className="rounded-full border border-white/18 bg-black/20 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-white/75">
+        <div
+          className={`
+            rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest
+            ${
+              active
+                ? "border-[#22A745]/45 bg-[#22A745]/18 text-white"
+                : "border-white/18 bg-black/20 text-white/75"
+            }
+          `}
+        >
           Masuk
         </div>
       </div>
@@ -494,5 +517,17 @@ function SiteButton({
         }`}
       />
     </motion.button>
+  )
+}
+
+function SiteIcon() {
+  return (
+    <img
+      src="/inspectorimage.png"
+      alt=""
+      aria-hidden="true"
+      className="h-12 w-12 object-contain"
+      draggable={false}
+    />
   )
 }
