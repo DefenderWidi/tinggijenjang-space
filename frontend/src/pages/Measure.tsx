@@ -1382,48 +1382,6 @@ ctx.fillText(valueUnit, unitX, textY)
                 </select>
               </div>
 
-              <div>
-                <label className="text-[11px] font-semibold text-buma-muted">
-                  Apakah loading 45 derajat? <span className="text-buma-orange">*</span>
-                </label>
-
-                <div className="mt-1 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoading45Ok(true)
-                      setMeasureError(false)
-                    }}
-                    className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${
-                      loading45Ok === true
-                        ? "border-buma-green/50 bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
-                        : "border-buma-border bg-white text-buma-text hover:bg-buma-green/5"
-                    }`}
-                  >
-                    Ya
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoading45Ok(false)
-                      setMeasureError(false)
-                    }}
-                    className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${
-                      loading45Ok === false
-                        ? "border-red-500/50 bg-gradient-to-r from-red-600 to-red-500 text-white"
-                        : "border-buma-border bg-white text-buma-text hover:bg-red-50"
-                    }`}
-                  >
-                    Tidak
-                  </button>
-                </div>
-
-                <div className="mt-1 text-[11px] leading-relaxed text-buma-muted">
-                  Jawaban ini akan langsung masuk ke Dashboard Evaluator bersama data inspeksi.
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 gap-2">
                 <button
                   className={`rounded-xl px-4 py-2.5 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${refSelected && pixelPerMeter
@@ -1473,6 +1431,43 @@ ctx.fillText(valueUnit, unitX, textY)
                 </div>
               )}
             </div>
+                <div>
+                <label className="text-[11px] font-semibold text-buma-muted mt-4 block">
+                  Apakah loading 45 derajat? <span className="text-buma-orange">*</span>
+                </label>
+
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoading45Ok(true)
+                      setMeasureError(false)
+                    }}
+                    className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${
+                      loading45Ok === true
+                        ? "border-buma-green/50 bg-gradient-to-r from-[#15803D] to-[#22A745] text-white"
+                        : "border-buma-border bg-white text-buma-text hover:bg-buma-green/5"
+                    }`}
+                  >
+                    Ya
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoading45Ok(false)
+                      setMeasureError(false)
+                    }}
+                    className={`rounded-xl border px-3 py-2 text-sm font-extrabold shadow-soft transition-all duration-200 active:scale-95 ${
+                      loading45Ok === false
+                        ? "border-red-500/50 bg-gradient-to-r from-red-600 to-red-500 text-white"
+                        : "border-buma-border bg-white text-buma-text hover:bg-red-50"
+                    }`}
+                  >
+                    Tidak
+                  </button>
+                </div>
+              </div>
           </div>
         </aside>
 
