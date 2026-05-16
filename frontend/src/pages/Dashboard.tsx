@@ -18,12 +18,10 @@ import { getLimitM } from "../config/reference"
 
 type Shift = "SIANG" | "MALAM"
 type ReviewStatus = "PENDING" | "VALID" | "REJECT"
-type DashboardView = "FRONT" | "DISPOSAL" | "ROAD"
+type DashboardView = "FRONT"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 const LS_KEY = "mt_session_v1"
-const DISPOSAL_REF_UNITS = new Set(["D155", "D375", "HD789", "HD785", "HD777"])
-
 type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
 
 function normalizeSite(value: unknown): SiteCode {
@@ -104,52 +102,9 @@ function cls(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ")
 }
 
-function normalizeModeValue(v: unknown): string {
-  return String(v ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/[\s_-]+/g, "")
-}
-
-function inferDashboardView(r: any): DashboardView {
-  const candidates = [
-    r.dashboard_view,
-    r.dashboardView,
-    r.measure_mode,
-    r.measureMode,
-    r.measure_type,
-    r.measureType,
-    r.inspection_mode,
-    r.inspectionMode,
-    r.operational_mode,
-    r.operationalMode,
-    r.area_type,
-    r.areaType,
-    r.location_type,
-    r.locationType,
-    r.segment,
-    r.category,
-    r.type,
-  ]
-
-  for (const raw of candidates) {
-    const s = normalizeModeValue(raw)
-
-    if (!s) continue
-    if (s.includes("DISPOSAL")) return "DISPOSAL"
-    if (s.includes("ROAD") || s.includes("JALAN")) return "ROAD"
-    if (s.includes("FRONT")) return "FRONT"
-  }
-
-  // fallback 1: samakan logika dengan PJA -> cek ref unit disposal
-  const refUnit = normalizeModeValue(r.ref_unit ?? r.refUnit)
-  if (DISPOSAL_REF_UNITS.has(refUnit)) return "DISPOSAL"
-
-  // fallback 2: cek area/front
-  const areaText = normalizeModeValue(r.front ?? r.area ?? r.location)
-  if (areaText.includes("DISPOSAL")) return "DISPOSAL"
-  if (areaText.includes("ROAD") || areaText.includes("JALAN")) return "ROAD"
-
+function inferDashboardView(_r: any): DashboardView {
+  // Flow baru: fitur disposal/road sudah dinonaktifkan.
+  // Semua data inspection diperlakukan sebagai Front.
   return "FRONT"
 }
 
@@ -165,7 +120,7 @@ function mapInspection(r: any): InspectionRow {
     linesCount: Number(r.lines_count ?? r.linesCount ?? 0),
     linesOkCount: Number(r.lines_ok_count ?? r.linesOkCount ?? 0),
     maxHeightM: Number(r.max_height_m ?? r.maxHeightM ?? 0),
-    reviewedBy: r.reviewed_by ? String(r.reviewed_by) : r.reviewedBy ? String(r.reviewedBy) : null,
+    reviewedBy: r.reviewed_by ? String(r.reviewed_by) : r.sumber_data ? String(r.sumber_data) : r.reviewedBy ? String(r.reviewedBy) : null,
     reviewStatus: (r.review_status === "VALID" || r.review_status === "REJECT" || r.review_status === "PENDING"
       ? r.review_status
       : r.reviewStatus === "VALID" || r.reviewStatus === "REJECT" || r.reviewStatus === "PENDING"
@@ -293,9 +248,7 @@ function pointSortValue(label: string) {
   return 99999
 }
 
-function viewLabel(view: DashboardView) {
-  if (view === "DISPOSAL") return "Disposal"
-  if (view === "ROAD") return "Road"
+function viewLabel(_view?: DashboardView) {
   return "Front"
 }
 
@@ -458,10 +411,10 @@ function DonutCompliance({
   total: number
 }) {
   const data = [
-    { name: "Diverifikasi", value: verified, color: "#2563EB" },
+    { name: "Titik Tercatat", value: verified, color: "#2563EB" },
     { name: "Sesuai", value: ok, color: "#15803D" },
     { name: "Tidak sesuai", value: bad, color: "#EF4444" },
-    { name: "Belum diverifikasi", value: unverified, color: "#9CA3AF" },
+    { name: "Tanpa status", value: unverified, color: "#9CA3AF" },
   ]
 
   return (
@@ -472,7 +425,7 @@ function DonutCompliance({
             Kesesuaian Titik
           </div>
           <div className="mt-1 text-sm leading-relaxed text-buma-muted">
-            Menampilkan jumlah garis yang sudah diverifikasi, sesuai, tidak sesuai, dan belum diverifikasi.
+            Menampilkan titik hasil inspeksi yang langsung masuk dashboard: total titik, sesuai, tidak sesuai, dan tanpa status.
           </div>
         </div>
 
@@ -744,100 +697,6 @@ function ActualDistributionChart({
   )
 }
 
-function DisposalInspectionTrendChart({
-  loading,
-  rows,
-  mode,
-}: {
-  loading: boolean
-  rows: Array<{ label: string; value: number }>
-  mode: "DAILY" | "WEEKLY"
-}) {
-  const maxValue = Math.max(...rows.map((x) => x.value), 0)
-
-  return (
-    <div className="rounded-3xl border border-buma-border bg-white shadow-soft">
-      <div className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">
-              Inspeksi Disposal Terverifikasi
-            </div>
-            <div className="mt-1 text-sm text-buma-muted">
-              Menampilkan jumlah inspeksi disposal yang sudah diverifikasi pada periode terpilih.
-            </div>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="mt-5 flex items-center justify-center rounded-2xl border border-buma-border bg-white p-8">
-            <div className="relative flex items-center justify-center">
-              <div className="h-16 w-16 animate-spin rounded-full border-4 border-transparent border-t-buma-green border-r-buma-green/40 sm:h-20 sm:w-20" />
-              <div className="absolute h-11 w-11 animate-[spin_1.2s_linear_reverse_infinite] rounded-full border-4 border-transparent border-t-buma-blue border-l-buma-blue/40 sm:h-14 sm:w-14" />
-            </div>
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="mt-5 rounded-2xl border border-buma-border bg-buma-bg p-4 text-sm text-buma-muted">
-            Belum ada inspeksi disposal yang terverifikasi pada periode ini.
-          </div>
-        ) : (
-          <>
-            <div className="mt-4 h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rows} barCategoryGap={26}>
-                  <CartesianGrid stroke="rgba(0,0,0,0.06)" vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11 }}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tickLine={false}
-                    axisLine={false}
-                    domain={[0, Math.max(maxValue + 2, 5)]}
-                    tick={{ fontSize: 11 }}
-                    width={34}
-                  />
-                  <Tooltip
-                    formatter={(value: number | string | undefined) => [
-                      `${value ?? 0} inspeksi`,
-                      "Jumlah inspeksi",
-                    ]}
-                    labelFormatter={(label) =>
-                      mode === "DAILY"
-                        ? `Tanggal: ${String(label ?? "")}`
-                        : `Periode: ${String(label ?? "")}`
-                    }
-                  />
-                  <Bar dataKey="value" fill="#2563EB" radius={[12, 12, 0, 0]} maxBarSize={56}>
-                    <LabelList
-                      dataKey="value"
-                      position="top"
-                      className="fill-buma-text"
-                      fontSize={11}
-                      fontWeight={700}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="mt-3 flex items-center justify-center gap-2 text-[12px] font-semibold text-buma-muted">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: "#2563EB" }}
-              />
-              Jumlah inspeksi disposal terverifikasi per {mode === "DAILY" ? "tanggal" : "periode"}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
 function MetaCard({ k, v }: { k: string; v: string }) {
   return (
     <div className="rounded-2xl border border-buma-border bg-white p-3 text-xs">
@@ -888,7 +747,7 @@ function DetailTable({
           <div>
             <div className="flex items-center gap-2">
               <div className="text-sm font-extrabold uppercase tracking-widest text-buma-text">
-                Detail Operasional
+                Detail Front
               </div>
               <span className="inline-flex rounded-full border border-buma-border bg-buma-bg px-2.5 py-1 text-[11px] font-extrabold text-buma-muted">
                 {mode === "DAILY" ? "Daily View" : "Weekly View"}
@@ -940,15 +799,15 @@ function DetailTable({
                   <th className="px-2 py-2 min-w-[120px]">Inspector</th>
                   <th className="px-2 py-2 min-w-[62px]">Shift</th>
                   <th className="px-2 py-2 min-w-[96px]">Pelaksanaan</th>
-                  <th className="px-2 py-2 min-w-[110px]">{currentView === "DISPOSAL" ? "Disposal" : "Front"}</th>
+                  <th className="px-2 py-2 min-w-[110px]">{"Front"}</th>
                   <th className="px-2 py-2 min-w-[86px] text-center">Ref Unit</th>
                   <th className="px-2 py-2 min-w-[74px] text-center">Limit</th>
                   <th className="px-2 py-2 min-w-[78px] text-center">Max</th>
                   <th className="px-2 py-2 min-w-[54px] text-center">Titik</th>
 <th className="px-2 py-2 min-w-[108px] text-center">Kesesuaian</th>
 <th className="px-2 py-2 min-w-[104px] text-center">Loading 45°</th>
-<th className="px-2 py-2 min-w-[96px]">Reviewer PJA</th>
-<th className="px-2 py-2 min-w-[88px] text-center">Status</th>
+<th className="px-2 py-2 min-w-[96px]">Sumber Data</th>
+<th className="px-2 py-2 min-w-[88px] text-center">Status Data</th>
                   <th className="px-3 py-2 min-w-[88px] text-right">Aksi</th>
                 </tr>
               </thead>
@@ -958,7 +817,7 @@ function DetailTable({
                   const { date, time } = formatDateTime(r.inspectedAt)
                   const zebra = idx % 2 === 0 ? "bg-white" : "bg-buma-bg/60"
 
-                  const isReviewed = r.reviewStatus !== "PENDING" && !!r.reviewedBy
+                  const isReviewed = true
                   const pct = isReviewed ? pctOk(r.linesOkCount, r.linesCount) : 0
                   const limitM = r.refUnit ? getLimitM(r.refUnit) : null
 
@@ -1070,8 +929,8 @@ function DetailTable({
 </td>
 
                       <td className="px-2 py-2.5">
-                        <div className="max-w-[96px] truncate" title={r.reviewedBy ?? "—"}>
-                          {r.reviewedBy ?? "—"}
+                        <div className="max-w-[96px] truncate" title={r.reviewedBy === "AUTO_DASHBOARD" ? "Inspector" : r.reviewedBy ?? "Inspector"}>
+                          {r.reviewedBy === "AUTO_DASHBOARD" ? "Inspector" : r.reviewedBy ?? "Inspector"}
                         </div>
                       </td>
 
@@ -1082,7 +941,7 @@ function DetailTable({
                             statusCls
                           )}
                         >
-                          {r.reviewStatus}
+                          {r.reviewStatus === "VALID" ? "MASUK DASHBOARD" : r.reviewStatus}
                         </span>
                       </td>
 
@@ -1091,7 +950,7 @@ function DetailTable({
                           type="button"
                           onClick={() => onOpenReview(r)}
                           className="inline-flex items-center gap-1 rounded-lg border border-buma-border bg-gradient-to-r from-black/5 to-transparent px-2 py-1.5 text-[11px] font-extrabold text-buma-text shadow-sm transition-all duration-200 hover:border-black/30 hover:from-black/8 hover:shadow-md"
-                          title="Lihat detail verifikasi PJA (view only)"
+                          title="Lihat detail inspeksi"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -1212,7 +1071,7 @@ function ReviewDetailModal({
   const standardM = active.refUnit ? getLimitM(active.refUnit) : 0
   const { date, time } = formatDateTime(active.inspectedAt)
 
-  const isReviewed = active.reviewStatus !== "PENDING" && !!active.reviewedBy
+  const isReviewed = true
   const pct = isReviewed ? pctOk(active.linesOkCount, active.linesCount) : 0
 
   const refVerifyState =
@@ -1331,16 +1190,16 @@ function ReviewDetailModal({
                   <MetaCard k="Inspector" v={active.inspector} />
                   <MetaCard k="Shift" v={shiftLabel(active.shift)} />
                   <MetaCard k="Pelaksanaan" v={active.pelaksanaan || "—"} />
-                  <MetaCard k={active.dashboardView === "DISPOSAL" ? "Disposal/Area" : "Front/Area"} v={active.front || "—"} />
+                  <MetaCard k="Front/Area" v={active.front || "—"} />
                   <MetaCard k="Max Height" v={`${Number(active.maxHeightM || 0).toFixed(2)} m`} />
                   <MetaCard k="Lines" v={`${active.linesCount}`} />
-                  <MetaCard k="Reviewer" v={active.reviewedBy ?? "—"} />
+                  <MetaCard k="Sumber Data" v={active.reviewedBy === "AUTO_DASHBOARD" ? "Inspector" : active.reviewedBy ?? "Inspector"} />
                   <MetaCard k="Ref Unit" v={active.refUnit ?? "—"} />
                   <MetaCard k="Limit" v={`${standardM.toFixed(2)} m`} />
                   <MetaCard k="Loading 45°" v={loading45Label(active.loading45Ok)} />
 
                   <div className="rounded-2xl border border-buma-border bg-white p-3 text-xs">
-                    <div className="text-buma-muted">Status</div>
+                    <div className="text-buma-muted">Status Data</div>
                     <div className="mt-1">
                       <span
                         className={cls(
@@ -1348,14 +1207,14 @@ function ReviewDetailModal({
                           statusBadgeCls
                         )}
                       >
-                        {active.reviewStatus}
+                        {active.reviewStatus === "VALID" ? "MASUK DASHBOARD" : active.reviewStatus}
                       </span>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-buma-border bg-buma-bg p-3 text-xs text-buma-muted">
-                  <div className="font-extrabold text-buma-text">Ringkasan Kepatuhan</div>
+                  <div className="font-extrabold text-buma-text">Ringkasan Kesesuaian</div>
                   <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <MetaMini k="% Sesuai" v={isReviewed ? `${pct}%` : "—"} />
                     <MetaMini k="OK / Total" v={isReviewed ? `${active.linesOkCount}/${active.linesCount}` : "—"} />
@@ -1669,7 +1528,7 @@ function ReviewDetailModal({
 
 export default function Dashboard() {
   const [mode, setMode] = useState<"DAILY" | "WEEKLY">("DAILY")
-  const [currentView, setCurrentView] = useState<DashboardView>("FRONT")
+  const currentView: DashboardView = "FRONT"
   const [activeSite, setActiveSite] = useState<SiteCode>(() => getSessionSite())
 
   function todayYMD() {
@@ -1723,8 +1582,6 @@ export default function Dashboard() {
     ],
   })
 
-const [disposalTrendLoading, setDisposalTrendLoading] = useState(false)
-const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value: number }>>([])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -1769,11 +1626,9 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
     return timeFiltered.filter((x) => x.dashboardView === currentView)
   }, [timeFiltered, currentView])
 
-  const inspectionsReviewed = useMemo(() => {
-    return inspections.filter((x) => x.reviewStatus !== "PENDING" && !!x.reviewedBy)
-  }, [inspections])
-
-  const isEmptyReviewed = inspectionsReviewed.length === 0
+  // Flow baru: data dari Inspector langsung masuk dashboard.
+  // Tidak ada lagi gate/verifikasi PJA, sehingga semua inspection pada site/periode aktif dihitung.
+  const isEmptyReviewed = false
 
   const [isExporting, setIsExporting] = useState(false)
   const [exportMsg, setExportMsg] = useState("")
@@ -1874,7 +1729,7 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
         const sorted = [...linesRaw].sort((a, b) => pointSortValue(a.label) - pointSortValue(b.label))
         const pointMap = new Map(sorted.map((ln) => [String(ln.label).toUpperCase(), ln]))
 
-        const isReviewed = x.reviewStatus !== "PENDING" && !!x.reviewedBy
+        const isReviewed = true
         const titikSesuai = isReviewed ? x.linesOkCount : 0
         const compliancePct = isReviewed ? pctOk(titikSesuai, x.linesCount) : 0
 
@@ -1912,8 +1767,8 @@ return {
           titik_C: pointCell("C"),
           titik_D: pointCell("D"),
           titik_E: pointCell("E"),
-          review_status: x.reviewStatus,
-          reviewed_by: x.reviewedBy ?? "",
+          status_data: x.reviewStatus === "VALID" ? "MASUK DASHBOARD" : x.reviewStatus,
+          sumber_data: x.reviewedBy === "AUTO_DASHBOARD" ? "Inspector" : x.reviewedBy ?? "Inspector",
           photo_url: photoUrl ?? "",
         }
       })
@@ -1943,8 +1798,8 @@ wsAnalyst["!cols"] = [
   { wch: 18 }, // titik_C
   { wch: 18 }, // titik_D
   { wch: 18 }, // titik_E
-  { wch: 14 }, // review_status
-  { wch: 16 }, // reviewed_by
+  { wch: 14 }, // status_data
+  { wch: 16 }, // sumber_data
   { wch: 28 }, // photo_url
 ]
 
@@ -1967,26 +1822,16 @@ wsAnalyst["!cols"] = [
   }
 
   const compliance = useMemo(() => {
-    const total = inspections.reduce((s, x) => s + (x.linesCount ?? 0), 0)
-
-    const ok = inspections.reduce((s, x) => {
-      const isReviewed = x.reviewStatus !== "PENDING" && !!x.reviewedBy
-      return s + (isReviewed ? (x.linesOkCount ?? 0) : 0)
-    }, 0)
-
-    const verified = inspections.reduce((s, x) => {
-      const isReviewed = x.reviewStatus !== "PENDING" && !!x.reviewedBy
-      return s + (isReviewed ? (x.linesCount ?? 0) : 0)
-    }, 0)
-
-    const bad = Math.max(0, verified - ok)
-    const unverified = Math.max(0, total - verified)
+    // Flow baru: semua data Inspector langsung dihitung sebagai data dashboard.
+    const total = inspections.reduce((sum, row) => sum + (row.linesCount ?? 0), 0)
+    const ok = inspections.reduce((sum, row) => sum + (row.linesOkCount ?? 0), 0)
+    const bad = Math.max(0, total - ok)
 
     return {
-      verified,
+      verified: total,
       ok,
       bad,
-      unverified,
+      unverified: 0,
       total,
     }
   }, [inspections])
@@ -1997,24 +1842,6 @@ wsAnalyst["!cols"] = [
     let cancelled = false
 
     async function buildActualDistribution() {
-      if (currentView !== "FRONT") {
-        setActualDist({
-          shovel: [
-            { label: "Di bawah 7 m", count: 0, pct: 0 },
-            { label: "7-8 m", count: 0, pct: 0 },
-            { label: "8-9 m", count: 0, pct: 0 },
-            { label: "Di atas 9 m", count: 0, pct: 0 },
-          ],
-          backhoe: [
-            { label: "Di bawah 3 m", count: 0, pct: 0 },
-            { label: "3-4 m", count: 0, pct: 0 },
-            { label: "4-5 m", count: 0, pct: 0 },
-            { label: "Lebih dari 5 m", count: 0, pct: 0 },
-          ],
-        })
-        return
-      }
-
       if (!inspections.length) {
         setActualDist({
           shovel: [
@@ -2154,42 +1981,9 @@ wsAnalyst["!cols"] = [
     return () => {
       cancelled = true
     }
-  }, [inspections, currentView])
+  }, [inspections])
 
- useEffect(() => {
-  if (currentView !== "DISPOSAL") {
-    setDisposalTrend([])
-    return
-  }
 
-  setDisposalTrendLoading(true)
-
-  try {
-    const reviewedOnly = inspections.filter(
-      (x) => x.reviewStatus !== "PENDING" && !!x.reviewedBy
-    )
-
-    if (!reviewedOnly.length) {
-      setDisposalTrend([])
-      return
-    }
-
-    const grouped = new Map<string, number>()
-
-    for (const row of reviewedOnly) {
-      const key = ymd(row.inspectedAt)
-      grouped.set(key, (grouped.get(key) ?? 0) + 1)
-    }
-
-    const rows = Array.from(grouped.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([label, value]) => ({ label, value }))
-
-    setDisposalTrend(rows)
-  } finally {
-    setDisposalTrendLoading(false)
-  }
-}, [inspections, currentView])
 
   return (
     <AppLayout>
@@ -2200,7 +1994,7 @@ wsAnalyst["!cols"] = [
             <div>
               <div className="text-2xl font-extrabold tracking-tight text-buma-text">Dashboard Operasional</div>
               <div className="mt-1 text-sm text-buma-muted">
-                Monitoring kepatuhan tinggi jenjang & ringkasan verifikasi per mode operasional sesuai site aktif.
+                Monitoring tinggi jenjang Front dari data Inspector sesuai site aktif.
               </div>
             </div>
 
@@ -2208,7 +2002,7 @@ wsAnalyst["!cols"] = [
               <StatPill label="Site Aktif" value={activeSite} tone="ok" />
               <StatPill label="Mode Area" value={viewLabel(currentView)} tone="info" />
               <StatPill label="Total Garis" value={`${compliance.total}`} tone="info" />
-              <StatPill label="Diverifikasi" value={`${compliance.verified}`} tone="info" />
+              <StatPill label="Titik Tercatat" value={`${compliance.verified}`} tone="info" />
               <StatPill label="Garis Sesuai" value={`${compliance.ok}`} tone="ok" />
               <StatPill label="Garis Tidak Sesuai" value={`${compliance.bad}`} tone="warn" />
               <StatPill label="Periode" value={mode} tone="info" />
@@ -2217,41 +2011,8 @@ wsAnalyst["!cols"] = [
 
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex rounded-xl border border-buma-border bg-buma-bg p-1">
-                <button
-                  type="button"
-                  onClick={() => setCurrentView("FRONT")}
-                  className={cls(
-                    "min-w-[96px] rounded-lg px-4 py-2 text-xs font-extrabold uppercase tracking-widest transition",
-                    currentView === "FRONT"
-                      ? "bg-gradient-to-r from-[#15803D] to-[#22A745] text-white shadow-soft"
-                      : "text-buma-muted hover:text-buma-text"
-                  )}
-                >
-                  Front
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCurrentView("DISPOSAL")}
-                  className={cls(
-                    "min-w-[96px] rounded-lg px-4 py-2 text-xs font-extrabold uppercase tracking-widest transition",
-                    currentView === "DISPOSAL"
-                      ? "bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-white shadow-soft"
-                      : "text-buma-muted hover:text-buma-text"
-                  )}
-                >
-                  Disposal
-                </button>
-
-                <button
-                  type="button"
-                  disabled
-                  className="min-w-[96px] cursor-not-allowed rounded-lg px-4 py-2 text-xs font-extrabold uppercase tracking-widest text-buma-muted/55"
-                  title="Mode road segera hadir"
-                >
-                  Road
-                </button>
+              <div className="inline-flex items-center rounded-xl border border-buma-green/20 bg-buma-green/10 px-4 py-2 text-xs font-extrabold uppercase tracking-widest text-buma-green">
+                Front Only
               </div>
 
               <div className="inline-flex rounded-xl border border-buma-border bg-buma-bg p-1">
@@ -2342,7 +2103,7 @@ wsAnalyst["!cols"] = [
           <div className="grid gap-4 lg:grid-cols-2">
             {isEmptyReviewed ? (
               <div className="rounded-3xl border border-buma-border bg-white shadow-soft lg:col-span-2">
-                <div className="p-6 text-sm text-buma-muted">Data inspeksi belum ada yang diverifikasi.</div>
+                <div className="p-6 text-sm text-buma-muted">Data inspeksi belum tersedia pada periode ini.</div>
               </div>
             ) : (
               <>
@@ -2354,25 +2115,17 @@ wsAnalyst["!cols"] = [
                   total={compliance.total}
                 />
 
-          {currentView === "DISPOSAL" ? (
-  <DisposalInspectionTrendChart
-    loading={disposalTrendLoading}
-    rows={disposalTrend}
-    mode={mode}
-  />
-) : (
-  <ActualDistributionChart
-    shovelRows={actualDist.shovel}
-    backhoeRows={actualDist.backhoe}
-    loading={actualDistLoading}
-    empty={
-      (
-        actualDist.shovel.reduce((s, x) => s + x.count, 0) +
-        actualDist.backhoe.reduce((s, x) => s + x.count, 0)
-      ) === 0
-    }
-  />
-)}
+                <ActualDistributionChart
+                  shovelRows={actualDist.shovel}
+                  backhoeRows={actualDist.backhoe}
+                  loading={actualDistLoading}
+                  empty={
+                    (
+                      actualDist.shovel.reduce((s, x) => s + x.count, 0) +
+                      actualDist.backhoe.reduce((s, x) => s + x.count, 0)
+                    ) === 0
+                  }
+                />
               </>
             )}
           </div>

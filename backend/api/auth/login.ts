@@ -5,19 +5,23 @@ import { setAuthCookie } from "../_lib/adminAuth.js"
 
 function setCors(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin || ""
+
   const allowedOrigins = [
     "http://localhost:5173",
-    "https://tinggijenjang.vercel.app",
+    "http://localhost:3000",
     "https://tinggijenjang-space.vercel.app",
+    "https://tinggijenjang-space-be.vercel.app",
   ]
 
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin)
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "https://tinggijenjang-space.vercel.app")
   }
 
   res.setHeader("Vary", "Origin")
   res.setHeader("Access-Control-Allow-Credentials", "true")
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS")
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Requested-With"

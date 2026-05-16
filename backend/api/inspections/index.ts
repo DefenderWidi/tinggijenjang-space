@@ -58,6 +58,17 @@ function normalizeSite(value: any): SiteCode {
   return "LAT"
 }
 
+function normalizeReviewStatus(value: any): ReviewStatus {
+  const status = String(value || "").trim().toUpperCase()
+
+  if (status === "PENDING" || status === "VALID" || status === "REJECT") {
+    return status
+  }
+
+  // Flow baru: data inspector langsung masuk Dashboard Evaluator tanpa PJA.
+  return "VALID"
+}
+
 function getSiteFromBody(body: Record<string, any>): SiteCode {
   return normalizeSite(
     body?.site ??
@@ -82,6 +93,19 @@ function getSiteFromQuery(req: VercelRequest): SiteCode | null {
 
   const site = normalizeSite(Array.isArray(raw) ? raw[0] : raw)
   return site
+}
+
+function withSiteAliases(row: any) {
+  const site = normalizeSite(row?.site)
+
+  return {
+    ...row,
+    site,
+    siteCode: site,
+    activeSite: site,
+    selectedSite: site,
+    workspaceSite: site,
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -123,18 +147,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (e2) {
         console.error("api/inspections measures lookup error:", e2)
+
         return res.status(200).json({
-          data: rows.map((r: any) => {
-            const site = normalizeSite(r?.site)
-            return {
-              ...r,
-              site,
-              siteCode: site,
-              activeSite: site,
-              selectedSite: site,
-              workspaceSite: site,
-            }
-          }),
+          data: rows.map((r: any) => withSiteAliases(r)),
         })
       }
 
@@ -202,8 +217,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           activeSite: site,
           selectedSite: site,
           workspaceSite: site,
-          ref_unit: pickFirstNonEmpty(r?.ref_unit, r?.refUnit, m?.ref_unit, m?.refUnit),
-          ref_meter: pickFirstNonEmpty(r?.ref_meter, r?.refMeter, m?.ref_meter, m?.refMeter),
+          ref_unit: pickFirstNonEmpty(
+            r?.ref_unit,
+            r?.refUnit,
+            m?.ref_unit,
+            m?.refUnit
+          ),
+          ref_meter: pickFirstNonEmpty(
+            r?.ref_meter,
+            r?.refMeter,
+            m?.ref_meter,
+            m?.refMeter
+          ),
           dashboard_view: mergedDashboardView,
           measure_mode: mergedMeasureMode,
           inspection_mode: mergedInspectionMode,
@@ -225,12 +250,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const shift: Shift | null =
         body?.shift === "DAY" || body?.shift === "NIGHT" ? body.shift : null
 
-      const review_status: ReviewStatus =
-        body?.review_status === "VALID" ||
-        body?.review_status === "REJECT" ||
-        body?.review_status === "PENDING"
-          ? body.review_status
-          : "PENDING"
+      const review_status: ReviewStatus = normalizeReviewStatus(body?.review_status)
 
       const payload = {
         site,
@@ -241,8 +261,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         lines_count: Number(body?.lines_count ?? 0),
         lines_ok_count: Number(body?.lines_ok_count ?? 0),
         max_height_m: Number(body?.max_height_m ?? 0),
-        reviewed_by: body?.reviewed_by ? String(body.reviewed_by) : null,
+
+        // Flow baru: langsung valid agar data muncul di Dashboard Evaluator.
+        reviewed_by: body?.reviewed_by ? String(body.reviewed_by) : "AUTO_DASHBOARD",
         review_status,
+        ...(body?.review_notes
+          ? { review_notes: String(body.review_notes).slice(0, 1000) }
+          : {}),
+
         ...(body?.inspected_at ? { inspected_at: String(body.inspected_at) } : {}),
       }
 

@@ -1,75 +1,78 @@
-import { useEffect, useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { motion } from "framer-motion"
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 
-type ActiveRole = "FRONT" | "PJA" | "EVALUATOR"
-type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
+type ActiveRole = "FRONT" | "EVALUATOR";
+type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT";
 
-const LS_KEY = "mt_session_v1"
+const LS_KEY = "mt_session_v1";
 
 type SessionData = {
-  id?: string | null
-  username?: string
-  accountRole?: string
-  operationalAccess?: string
-  activeRole?: ActiveRole | null
+  id?: string | null;
+  username?: string;
+  accountRole?: string;
+  operationalAccess?: string;
+  activeRole?: ActiveRole | null;
 
-  site?: SiteCode | string | null
-  siteCode?: SiteCode | string | null
-  activeSite?: SiteCode | string | null
-  selectedSite?: SiteCode | string | null
-  workspaceSite?: SiteCode | string | null
-  area?: SiteCode | string | null
-  mineSite?: SiteCode | string | null
+  site?: SiteCode | string | null;
+  siteCode?: SiteCode | string | null;
+  activeSite?: SiteCode | string | null;
+  selectedSite?: SiteCode | string | null;
+  workspaceSite?: SiteCode | string | null;
+  area?: SiteCode | string | null;
+  mineSite?: SiteCode | string | null;
 
-  ts?: number
-}
+  ts?: number;
+};
 
 const SITE_OPTIONS: { code: SiteCode; label: string }[] = [
   { code: "LAT", label: "LAT" },
   { code: "IPR", label: "IPR" },
   { code: "SDJ", label: "SDJ" },
   { code: "ADT", label: "ADT" },
-]
+];
 
-const SUPER_ADMIN_USERNAMES = ["MFBAB", "Q4IUM"]
+const SUPER_ADMIN_USERNAMES = ["MFBAB", "Q4IUM"];
 
 const routeMap: Record<ActiveRole, string> = {
   FRONT: "/measure",
-  PJA: "/pja",
   EVALUATOR: "/app",
-}
+};
 
 function normalizeText(value?: string | null) {
-  return String(value || "").trim().toUpperCase()
+  return String(value || "")
+    .trim()
+    .toUpperCase();
 }
 
 function isSiteCode(value?: string | null): value is SiteCode {
-  const clean = normalizeText(value)
-  return clean === "LAT" || clean === "IPR" || clean === "SDJ" || clean === "ADT"
+  const clean = normalizeText(value);
+  return (
+    clean === "LAT" || clean === "IPR" || clean === "SDJ" || clean === "ADT"
+  );
 }
 
 function asSiteCode(value?: string | null): SiteCode | null {
-  const clean = normalizeText(value)
-  return isSiteCode(clean) ? clean : null
+  const clean = normalizeText(value);
+  return isSiteCode(clean) ? clean : null;
 }
 
 function getSession(): SessionData | null {
   try {
-    const raw = localStorage.getItem(LS_KEY)
-    if (!raw) return null
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
 
-    const parsed = JSON.parse(raw) as SessionData
-    if (!parsed || typeof parsed !== "object") return null
+    const parsed = JSON.parse(raw) as SessionData;
+    if (!parsed || typeof parsed !== "object") return null;
 
-    return parsed
+    return parsed;
   } catch {
-    return null
+    return null;
   }
 }
 
 function saveSessionMerge(patch: Partial<SessionData>) {
-  const prev = getSession() || {}
+  const prev = getSession() || {};
 
   localStorage.setItem(
     LS_KEY,
@@ -77,23 +80,23 @@ function saveSessionMerge(patch: Partial<SessionData>) {
       ...prev,
       ...patch,
       ts: Date.now(),
-    })
-  )
+    }),
+  );
 }
 
 function isSuperAdminUsername(username?: string | null) {
-  return SUPER_ADMIN_USERNAMES.includes(normalizeText(username))
+  return SUPER_ADMIN_USERNAMES.includes(normalizeText(username));
 }
 
 function isAdminSession(session?: SessionData | null) {
-  const username = normalizeText(session?.username)
-  const accountRole = normalizeText(session?.accountRole)
+  const username = normalizeText(session?.username);
+  const accountRole = normalizeText(session?.accountRole);
 
   return (
     accountRole === "ADMIN" ||
     accountRole === "SUPER_ADMIN" ||
     SUPER_ADMIN_USERNAMES.includes(username)
-  )
+  );
 }
 
 function getSessionSite(session: SessionData | null): SiteCode | null {
@@ -105,13 +108,13 @@ function getSessionSite(session: SessionData | null): SiteCode | null {
     asSiteCode(session?.siteCode) ||
     asSiteCode(session?.area) ||
     asSiteCode(session?.mineSite)
-  )
+  );
 }
 
 function ensureSessionAccess(session: SessionData | null) {
-  if (!session) return null
+  if (!session) return null;
 
-  const currentSite = getSessionSite(session) || "LAT"
+  const currentSite = getSessionSite(session) || "LAT";
 
   if (isSuperAdminUsername(session.username)) {
     const upgradedSession: SessionData = {
@@ -124,10 +127,10 @@ function ensureSessionAccess(session: SessionData | null) {
       selectedSite: currentSite,
       workspaceSite: currentSite,
       ts: Date.now(),
-    }
+    };
 
-    localStorage.setItem(LS_KEY, JSON.stringify(upgradedSession))
-    return upgradedSession
+    localStorage.setItem(LS_KEY, JSON.stringify(upgradedSession));
+    return upgradedSession;
   }
 
   const normalizedSession: SessionData = {
@@ -138,34 +141,34 @@ function ensureSessionAccess(session: SessionData | null) {
     selectedSite: currentSite,
     workspaceSite: currentSite,
     ts: Date.now(),
-  }
+  };
 
-  localStorage.setItem(LS_KEY, JSON.stringify(normalizedSession))
-  return normalizedSession
+  localStorage.setItem(LS_KEY, JSON.stringify(normalizedSession));
+  return normalizedSession;
 }
 
 export default function SelectRole() {
-  const nav = useNavigate()
+  const nav = useNavigate();
 
   const [session, setSession] = useState<SessionData | null>(() =>
-    ensureSessionAccess(getSession())
-  )
+    ensureSessionAccess(getSession()),
+  );
   const [selectedSite, setSelectedSite] = useState<SiteCode>(() => {
-    return getSessionSite(getSession()) || "LAT"
-  })
+    return getSessionSite(getSession()) || "LAT";
+  });
   const [hoveredRole, setHoveredRole] = useState<ActiveRole | "ADMIN" | null>(
-    null
-  )
-  const [notice, setNotice] = useState("")
+    null,
+  );
+  const [notice, setNotice] = useState("");
 
-  const username = session?.username || "-"
-  const operationalAccess = session?.operationalAccess ?? "NONE"
-  const isAdminAccount = isAdminSession(session)
+  const username = session?.username || "-";
+  const operationalAccess = session?.operationalAccess ?? "NONE";
+  const isAdminAccount = isAdminSession(session);
 
   const normalizedAccess = useMemo(
     () => normalizeText(operationalAccess),
-    [operationalAccess]
-  )
+    [operationalAccess],
+  );
 
   const canAccessFront = useMemo(() => {
     return (
@@ -173,28 +176,24 @@ export default function SelectRole() {
       normalizedAccess === "FIELD" ||
       normalizedAccess === "PJA" ||
       normalizedAccess === "ALL"
-    )
-  }, [isAdminAccount, normalizedAccess])
-
-  const canAccessPja = useMemo(() => {
-    return isAdminAccount || normalizedAccess === "PJA" || normalizedAccess === "ALL"
-  }, [isAdminAccount, normalizedAccess])
+    );
+  }, [isAdminAccount, normalizedAccess]);
 
   const canAccessEvaluator = useMemo(() => {
-    return isAdminAccount || normalizedAccess === "ALL"
-  }, [isAdminAccount, normalizedAccess])
+    return isAdminAccount || normalizedAccess === "ALL";
+  }, [isAdminAccount, normalizedAccess]);
 
   useEffect(() => {
-    const current = ensureSessionAccess(getSession())
-    setSession(current)
+    const current = ensureSessionAccess(getSession());
+    setSession(current);
 
     if (!current?.username) {
-      nav("/login", { replace: true })
-      return
+      nav("/login", { replace: true });
+      return;
     }
 
-    setSelectedSite(getSessionSite(current) || "LAT")
-  }, [nav])
+    setSelectedSite(getSessionSite(current) || "LAT");
+  }, [nav]);
 
   function saveActiveSite(site: SiteCode) {
     saveSessionMerge({
@@ -203,35 +202,32 @@ export default function SelectRole() {
       activeSite: site,
       selectedSite: site,
       workspaceSite: site,
-    })
+    });
 
-    setSelectedSite(site)
-    setSession(getSession())
+    setSelectedSite(site);
+    setSession(getSession());
   }
 
   function handleChangeSite(site: SiteCode) {
-    if (!isAdminAccount) return
-    setNotice("")
-    saveActiveSite(site)
+    if (!isAdminAccount) return;
+    setNotice("");
+    saveActiveSite(site);
   }
 
   function canAccessRole(role: ActiveRole) {
-    if (role === "FRONT") return canAccessFront
-    if (role === "PJA") return canAccessPja
-    if (role === "EVALUATOR") return canAccessEvaluator
-    return false
+    if (role === "FRONT") return canAccessFront;
+    if (role === "EVALUATOR") return canAccessEvaluator;
+    return false;
   }
 
   function handlePickRole(role: ActiveRole) {
     if (!canAccessRole(role)) {
       if (role === "FRONT") {
-        setNotice("Akun ini belum memiliki akses ke Inspector Front.")
-      } else if (role === "PJA") {
-        setNotice("Akun ini belum memiliki akses ke Verifikasi PJA.")
+        setNotice("Akun ini belum memiliki akses ke Inspector Front.");
       } else {
-        setNotice("Akun ini belum memiliki akses ke Evaluator.")
+        setNotice("Akun ini belum memiliki akses ke Evaluator.");
       }
-      return
+      return;
     }
 
     saveSessionMerge({
@@ -241,17 +237,17 @@ export default function SelectRole() {
       activeSite: selectedSite,
       selectedSite,
       workspaceSite: selectedSite,
-    })
+    });
 
-    setNotice("")
-    setHoveredRole(null)
-    nav(routeMap[role], { replace: true })
+    setNotice("");
+    setHoveredRole(null);
+    nav(routeMap[role], { replace: true });
   }
 
   function handleOpenAdmin() {
     if (!isAdminAccount) {
-      setNotice("Pusat Admin hanya tersedia untuk akun admin.")
-      return
+      setNotice("Pusat Admin hanya tersedia untuk akun admin.");
+      return;
     }
 
     saveSessionMerge({
@@ -262,11 +258,11 @@ export default function SelectRole() {
       activeSite: selectedSite,
       selectedSite,
       workspaceSite: selectedSite,
-    })
+    });
 
-    setNotice("")
-    setHoveredRole(null)
-    nav("/admin", { replace: true })
+    setNotice("");
+    setHoveredRole(null);
+    nav("/admin", { replace: true });
   }
 
   return (
@@ -315,7 +311,8 @@ export default function SelectRole() {
                   </h1>
 
                   <p className="mt-3 max-w-md text-sm leading-relaxed text-white/85 xl:text-base">
-                    Pilih role sesuai site aktif yang sudah ditentukan admin.
+                    Pilih Inspector atau Evaluator sesuai site aktif yang sudah
+                    ditentukan admin.
                   </p>
 
                   <div className="mt-6 text-xs text-white/65">
@@ -360,14 +357,7 @@ export default function SelectRole() {
                   <div className="mb-4 flex items-start justify-between gap-3 pt-12">
                     <div className="min-w-0">
                       <div className="text-xl font-extrabold text-white md:text-2xl">
-                        Pilih Role
-                      </div>
-                      <div className="mt-1 text-xs font-semibold leading-relaxed text-white/75 md:text-sm">
-                        Mode site aktif:{" "}
-                        <span className="font-extrabold text-white">
-                          {selectedSite}
-                        </span>
-                        . Semua fitur akan masuk sesuai site tersebut.
+                        Pilih Fitur
                       </div>
                     </div>
 
@@ -400,32 +390,30 @@ export default function SelectRole() {
                       </div>
 
                       {isAdminAccount ? (
-                        <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-white/15 bg-slate-950/55 p-1.5">
-                          {SITE_OPTIONS.map((site) => {
-                            const active = selectedSite === site.code
-
-                            return (
-                              <button
-                                key={site.code}
-                                type="button"
-                                onClick={() => handleChangeSite(site.code)}
-                                className={`
-                                  h-9 rounded-xl px-3 text-xs font-black tracking-wider text-white
-                                  transition-all duration-200 active:scale-[0.98]
-                                  ${
-                                    active
-                                      ? "border border-buma-green/60 bg-buma-green/25 shadow-[0_0_18px_rgba(34,167,69,0.18)]"
-                                      : "border border-white/10 bg-white/8 hover:border-buma-green/45 hover:bg-white/15"
-                                  }
-                                `}
-                              >
-                                {site.code}
-                              </button>
-                            )
-                          })}
-                        </div>
+                        <select
+                          value={selectedSite}
+                          onChange={(event) =>
+                            handleChangeSite(event.target.value as SiteCode)
+                          }
+                          className="
+                            h-10 min-w-[180px] rounded-xl border border-white/18
+                            bg-slate-950/85 px-3 text-sm font-extrabold text-white
+                            outline-none transition
+                            focus:border-buma-green focus:ring-2 focus:ring-buma-green/25
+                          "
+                        >
+                          {SITE_OPTIONS.map((site) => (
+                            <option
+                              key={site.code}
+                              value={site.code}
+                              className="bg-slate-950 text-white"
+                            >
+                              {site.code}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
-                        <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-extrabold text-white/85">
+                        <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-extrabold text-white/80">
                           Site dikunci oleh admin
                         </div>
                       )}
@@ -439,34 +427,22 @@ export default function SelectRole() {
                   ) : null}
 
                   <div className="grid gap-3">
-                    <RoleCard
-                      title={`Inspector Front ${selectedSite}`}
-                      desc={`Pengukuran tinggi jenjang untuk site ${selectedSite}.`}
-                      badge="FRONT"
-                      imageSrc="/inspectorimage.png"
-                      active={hoveredRole === "FRONT"}
-                      disabled={!canAccessFront}
-                      onHover={() => setHoveredRole("FRONT")}
-                      onLeave={() => setHoveredRole(null)}
-                      onClick={() => handlePickRole("FRONT")}
-                    />
-
                     <div className="grid gap-3 md:grid-cols-2">
                       <RoleCard
-                        title={`Verifikasi PJA ${selectedSite}`}
-                        desc={`Validasi hasil pengukuran site ${selectedSite}.`}
-                        badge="PJA"
-                        imageSrc="/verificatorimage.png"
-                        active={hoveredRole === "PJA"}
-                        disabled={!canAccessPja}
-                        onHover={() => setHoveredRole("PJA")}
+                        title={`Inspector Front ${selectedSite}`}
+                        desc={`Input pengukuran. Data langsung masuk Dashboard Evaluator site ${selectedSite}.`}
+                        badge="FRONT"
+                        imageSrc="/inspectorimage.png"
+                        active={hoveredRole === "FRONT"}
+                        disabled={!canAccessFront}
+                        onHover={() => setHoveredRole("FRONT")}
                         onLeave={() => setHoveredRole(null)}
-                        onClick={() => handlePickRole("PJA")}
+                        onClick={() => handlePickRole("FRONT")}
                       />
 
                       <RoleCard
                         title={`Evaluator ${selectedSite}`}
-                        desc={`Rekap dan evaluasi dashboard site ${selectedSite}.`}
+                        desc={`Lihat rekap dan evaluasi data site ${selectedSite} tanpa verifikasi PJA.`}
                         badge="EV"
                         imageSrc="/evaluatorimage.png"
                         active={hoveredRole === "EVALUATOR"}
@@ -493,7 +469,7 @@ export default function SelectRole() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function RoleCard({
@@ -507,15 +483,15 @@ function RoleCard({
   onLeave,
   onClick,
 }: {
-  title: string
-  desc: string
-  badge: string
-  imageSrc: string
-  active?: boolean
-  disabled?: boolean
-  onHover: () => void
-  onLeave: () => void
-  onClick: () => void
+  title: string;
+  desc: string;
+  badge: string;
+  imageSrc: string;
+  active?: boolean;
+  disabled?: boolean;
+  onHover: () => void;
+  onLeave: () => void;
+  onClick: () => void;
 }) {
   return (
     <motion.button
@@ -528,7 +504,7 @@ function RoleCard({
       whileHover={disabled ? undefined : { scale: 1.01 }}
       whileTap={disabled ? undefined : { scale: 0.985 }}
       className={`
-        group relative min-h-[92px] overflow-hidden rounded-2xl border px-3 py-3 text-left text-white
+        group relative min-h-[92px] overflow-hidden rounded-2xl border px-3 py-3 text-left
         backdrop-blur-xl transition-all duration-300
         ${
           disabled
@@ -566,7 +542,7 @@ function RoleCard({
         </div>
       </div>
     </motion.button>
-  )
+  );
 }
 
 function AdminCard({
@@ -575,10 +551,10 @@ function AdminCard({
   onLeave,
   onClick,
 }: {
-  active?: boolean
-  onHover: () => void
-  onLeave: () => void
-  onClick: () => void
+  active?: boolean;
+  onHover: () => void;
+  onLeave: () => void;
+  onClick: () => void;
 }) {
   return (
     <motion.button
@@ -592,7 +568,7 @@ function AdminCard({
       whileTap={{ scale: 0.985 }}
       className={`
         group relative w-full overflow-hidden
-        rounded-2xl border px-3 py-2.5 text-left text-white backdrop-blur-xl
+        rounded-2xl border px-3 py-2.5 text-left backdrop-blur-xl
         transition-all duration-300
         ${
           active
@@ -631,5 +607,5 @@ function AdminCard({
         </div>
       </div>
     </motion.button>
-  )
+  );
 }

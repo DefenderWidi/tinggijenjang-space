@@ -7,6 +7,38 @@ import { REF_PRESET_M, type RefKey, getLimitM } from "../config/reference"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 
+const LS_KEY = "mt_session_v1"
+type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
+
+function normalizeSite(value: unknown): SiteCode {
+  const site = String(value || "LAT").trim().toUpperCase()
+  if (site === "LAT" || site === "IPR" || site === "SDJ" || site === "ADT") {
+    return site
+  }
+  return "LAT"
+}
+
+function getActiveSiteFromSession(): SiteCode {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (!raw) return "LAT"
+
+    const session = JSON.parse(raw)
+    return normalizeSite(
+      session?.activeSite ||
+        session?.selectedSite ||
+        session?.workspaceSite ||
+        session?.site ||
+        session?.siteCode ||
+        session?.area ||
+        session?.mineSite
+    )
+  } catch {
+    return "LAT"
+  }
+}
+
+
 // ===== UI helpers =====
 function SectionTitle({
   no,
@@ -148,6 +180,8 @@ const FRONT_OPTIONS = [
 ] as const
 
 export default function Measure() {
+  const activeSite = useMemo(() => getActiveSiteFromSession(), [])
+
   // ======= Refs =======
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -622,65 +656,45 @@ ctx.fillText(valueUnit, unitX, textY)
       .filter((x) => Number.isFinite(x.height_m) && x.height_m > 0.01)
   }
 
-  function blobFromCanvas(
-    canvas: HTMLCanvasElement,
-    type: string,
-    quality?: number
-  ): Promise<Blob | null> {
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => resolve(blob), type, quality)
-    })
-  }
-
-  function makeCompressedCanvas(canvas: HTMLCanvasElement) {
-    /**
-     * Supabase free storage cepat penuh kalau overlay disimpan sebagai PNG besar.
-     * Jadi file upload dikompres otomatis:
-     * - dimensi dibatasi maksimal 1280 x 720
-     * - format utama WebP
-     * - fallback JPEG/PNG kalau browser tidak support WebP
-     */
+  async function canvasToFile(canvas: HTMLCanvasElement) {
     const MAX_W = 1280
     const MAX_H = 720
 
-    const ratio = Math.min(1, MAX_W / canvas.width, MAX_H / canvas.height)
+    const scale = Math.min(1, MAX_W / canvas.width, MAX_H / canvas.height)
+    const outCanvas = document.createElement("canvas")
+    outCanvas.width = Math.max(1, Math.round(canvas.width * scale))
+    outCanvas.height = Math.max(1, Math.round(canvas.height * scale))
 
-    if (ratio >= 1) return canvas
+    const ctx = outCanvas.getContext("2d")
+    if (!ctx) throw new Error("Canvas context not ready")
 
-    const out = document.createElement("canvas")
-    out.width = Math.max(1, Math.round(canvas.width * ratio))
-    out.height = Math.max(1, Math.round(canvas.height * ratio))
+    ctx.drawImage(canvas, 0, 0, outCanvas.width, outCanvas.height)
 
-    const ctx = out.getContext("2d")
-    if (!ctx) return canvas
+    const makeBlob = (type: string, quality: number) =>
+      new Promise<Blob | null>((resolve) => {
+        outCanvas.toBlob((blob) => resolve(blob), type, quality)
+      })
 
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = "high"
-    ctx.drawImage(canvas, 0, 0, out.width, out.height)
-
-    return out
-  }
-
-  async function canvasToFile(canvas: HTMLCanvasElement) {
-    const compressedCanvas = makeCompressedCanvas(canvas)
-
-    const webp = await blobFromCanvas(compressedCanvas, "image/webp", 0.72)
-    const jpeg = await blobFromCanvas(compressedCanvas, "image/jpeg", 0.78)
-    const png = await blobFromCanvas(compressedCanvas, "image/png", 0.92)
-
-    const candidates = [webp, jpeg, png].filter(Boolean) as Blob[]
-
-    if (!candidates.length) {
-      throw new Error("Gagal mengompres gambar overlay")
+    const webpBlob = await makeBlob("image/webp", 0.72)
+    if (webpBlob) {
+      return new File([webpBlob], `highwall-${Date.now()}.webp`, {
+        type: "image/webp",
+      })
     }
 
-    const bestBlob = candidates.sort((a, b) => a.size - b.size)[0]
-    const mime = bestBlob.type || "image/jpeg"
+    const jpgBlob = await makeBlob("image/jpeg", 0.78)
+    if (jpgBlob) {
+      return new File([jpgBlob], `highwall-${Date.now()}.jpg`, {
+        type: "image/jpeg",
+      })
+    }
 
-    const ext =
-      mime.includes("webp") ? "webp" : mime.includes("jpeg") || mime.includes("jpg") ? "jpg" : "png"
+    const pngBlob = await makeBlob("image/png", 0.9)
+    if (!pngBlob) throw new Error("toBlob failed")
 
-    return new File([bestBlob], `highwall-${Date.now()}.${ext}`, { type: mime })
+    return new File([pngBlob], `highwall-${Date.now()}.png`, {
+      type: "image/png",
+    })
   }
 
   async function createInspection(): Promise<string> {
@@ -692,6 +706,15 @@ ctx.fillText(valueUnit, unitX, textY)
         shift,                 // DAY|NIGHT (match backend)
         pelaksanaan: shiftTime, // START|MID|END (dipakai sebagai pelaksanaan)
         front: areaId.trim(),
+        site: activeSite,
+        siteCode: activeSite,
+        activeSite,
+        selectedSite: activeSite,
+        workspaceSite: activeSite,
+        // Flow baru: inspector langsung masuk dashboard/evaluator tanpa PJA.
+        review_status: "VALID",
+        reviewed_by: "AUTO_DASHBOARD",
+        review_notes: "Auto-valid dari Inspector. Flow PJA dinonaktifkan.",
         // summary awal (akan di-update setelah upload measure)
         lines_count: 0,
         lines_ok_count: 0,
@@ -714,6 +737,11 @@ ctx.fillText(valueUnit, unitX, textY)
 
     const fd = new FormData()
     fd.append("inspection_id", id)
+    fd.append("site", activeSite)
+    fd.append("siteCode", activeSite)
+    fd.append("activeSite", activeSite)
+    fd.append("selectedSite", activeSite)
+    fd.append("workspaceSite", activeSite)
     fd.append("max_height_m", String(stats.maxHeightM))
     fd.append("lines_count", String(stats.linesCount))
     fd.append("lines_ok_count", String(stats.linesOkCount))
@@ -751,6 +779,11 @@ ctx.fillText(valueUnit, unitX, textY)
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         inspection_id: id,
+        site: activeSite,
+        siteCode: activeSite,
+        activeSite,
+        selectedSite: activeSite,
+        workspaceSite: activeSite,
         lines,
       }),
     })
@@ -1012,7 +1045,7 @@ ctx.fillText(valueUnit, unitX, textY)
     try {
       setIsSubmitting(true)
       setSubmitStatus("loading")
-      setSubmitMsg("Menyimpan inspeksi & mengunggah foto overlay...")
+      setSubmitMsg("Menyimpan inspeksi dan langsung mengirim ke dashboard evaluator...")
 
       let id = inspectionId
       if (!id) {
@@ -1029,7 +1062,7 @@ ctx.fillText(valueUnit, unitX, textY)
       await uploadMeasure(id)
 
       setSubmitStatus("success")
-      setSubmitMsg("Inspeksi berhasil tersimpan lengkap.")
+      setSubmitMsg("Inspeksi berhasil tersimpan dan langsung masuk Dashboard Evaluator.")
       setTimeout(() => setSubmitStatus("idle"), 2000)
     } catch (e: any) {
       const msg =
@@ -1077,9 +1110,19 @@ ctx.fillText(valueUnit, unitX, textY)
         </div>
       )}
 
-<div className="mb-2">
-  <div className="text-2xl font-extrabold tracking-tight text-buma-text">
-    Workspace Pengukuran
+<div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <div className="text-2xl font-extrabold tracking-tight text-buma-text">
+      Workspace Pengukuran
+    </div>
+    <div className="mt-1 text-xs font-semibold text-buma-muted">
+      Flow baru: data inspector langsung masuk Dashboard Evaluator tanpa verifikasi PJA.
+    </div>
+  </div>
+
+  <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-buma-green/25 bg-buma-green/10 px-3 py-2 text-xs font-extrabold text-buma-green">
+    <span className="text-buma-muted">Site Aktif</span>
+    <span>{activeSite}</span>
   </div>
 </div>
 
@@ -1091,6 +1134,10 @@ ctx.fillText(valueUnit, unitX, textY)
 
           <div className="p-4">
             <SectionTitle no="01" title="Data Inspeksi" />
+            <div className="mb-3 rounded-xl border border-buma-green/20 bg-buma-green/5 px-3 py-2 text-xs font-semibold text-buma-text">
+              Site aktif: <span className="font-extrabold text-buma-green">{activeSite}</span>
+              <span className="ml-1 text-buma-muted">• langsung masuk Dashboard Evaluator</span>
+            </div>
             <div className="grid gap-3">
               <div className="grid gap-1">
                 <label className="text-[11px] font-semibold text-buma-muted">
