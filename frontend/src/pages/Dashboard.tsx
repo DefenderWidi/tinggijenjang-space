@@ -21,7 +21,40 @@ type ReviewStatus = "PENDING" | "VALID" | "REJECT"
 type DashboardView = "FRONT" | "DISPOSAL" | "ROAD"
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
+const LS_KEY = "mt_session_v1"
 const DISPOSAL_REF_UNITS = new Set(["D155", "D375", "HD789", "HD785", "HD777"])
+
+type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
+
+function normalizeSite(value: unknown): SiteCode {
+  const site = String(value ?? "LAT").trim().toUpperCase()
+  if (site === "LAT" || site === "IPR" || site === "SDJ" || site === "ADT") return site
+  return "LAT"
+}
+
+function getSessionSite(): SiteCode {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (!raw) return "LAT"
+    const s = JSON.parse(raw)
+    return normalizeSite(
+      s?.activeSite ??
+        s?.selectedSite ??
+        s?.workspaceSite ??
+        s?.site ??
+        s?.siteCode ??
+        s?.area ??
+        s?.mineSite
+    )
+  } catch {
+    return "LAT"
+  }
+}
+
+function withSiteParam(url: string, site: SiteCode) {
+  const sep = url.includes("?") ? "&" : "?"
+  return `${url}${sep}site=${encodeURIComponent(site)}`
+}
 
 type InspectionRow = {
   id: string
@@ -30,6 +63,7 @@ type InspectionRow = {
   shift: Shift
   pelaksanaan: string
   front: string
+  site: SiteCode
   linesCount: number
   linesOkCount: number
   maxHeightM: number
@@ -127,6 +161,7 @@ function mapInspection(r: any): InspectionRow {
     shift: (r.shift === "MALAM" ? "MALAM" : "SIANG") as Shift,
     pelaksanaan: pelaksanaanLabel(r.pelaksanaan),
     front: String(r.front ?? r.area ?? r.location ?? ""),
+    site: normalizeSite(r.site ?? r.siteCode ?? r.activeSite ?? r.selectedSite ?? r.workspaceSite),
     linesCount: Number(r.lines_count ?? r.linesCount ?? 0),
     linesOkCount: Number(r.lines_ok_count ?? r.linesOkCount ?? 0),
     maxHeightM: Number(r.max_height_m ?? r.maxHeightM ?? 0),
@@ -168,8 +203,8 @@ dashboardView: inferDashboardView(r),
   }
 }
 
-async function fetchInspections(signal?: AbortSignal): Promise<InspectionRow[]> {
-  const res = await fetch(`${API_BASE}/api/inspections`, { signal })
+async function fetchInspections(site: SiteCode, signal?: AbortSignal): Promise<InspectionRow[]> {
+  const res = await fetch(withSiteParam(`${API_BASE}/api/inspections`, site), { signal })
   if (!res.ok) throw new Error(`Failed to load inspections (${res.status})`)
   const json = await res.json()
   const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : []
@@ -286,9 +321,9 @@ function loading45Class(v?: boolean | null) {
    Review detail fetchers
 ========================= */
 
-async function fetchInspectionDetail(id: string, signal?: AbortSignal): Promise<any | null> {
+async function fetchInspectionDetail(id: string, site: SiteCode, signal?: AbortSignal): Promise<any | null> {
   try {
-    const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(id)}`, { signal })
+    const r = await fetch(withSiteParam(`${API_BASE}/api/inspections/${encodeURIComponent(id)}`, site), { signal })
     if (!r.ok) return null
     return await r.json()
   } catch {
@@ -296,9 +331,9 @@ async function fetchInspectionDetail(id: string, signal?: AbortSignal): Promise<
   }
 }
 
-async function fetchInspectionLines(id: string, signal?: AbortSignal): Promise<any[] | null> {
+async function fetchInspectionLines(id: string, site: SiteCode, signal?: AbortSignal): Promise<any[] | null> {
   try {
-    const r = await fetch(`${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(id)}`, { signal })
+    const r = await fetch(`${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(id)}&site=${encodeURIComponent(site)}`, { signal })
     if (!r.ok) return null
     const j = await r.json()
     const arr = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : []
@@ -308,9 +343,9 @@ async function fetchInspectionLines(id: string, signal?: AbortSignal): Promise<a
   }
 }
 
-async function fetchMeasurePhoto(inspectionId: string, signal?: AbortSignal): Promise<string | null> {
+async function fetchMeasurePhoto(inspectionId: string, site: SiteCode, signal?: AbortSignal): Promise<string | null> {
   try {
-    const r = await fetch(`${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}`, { signal })
+    const r = await fetch(`${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}&site=${encodeURIComponent(site)}`, { signal })
     if (!r.ok) return null
     const j = await r.json()
     const data = Array.isArray(j?.data) ? j.data : j?.data ? [j.data] : Array.isArray(j) ? j : []
@@ -834,10 +869,12 @@ function DetailTable({
   exportDisabled,
   exportBusy,
   exportMsg,
+  activeSite,
 }: {
   mode: "DAILY" | "WEEKLY"
   rows: InspectionRow[]
   currentView: DashboardView
+  activeSite: SiteCode
   onOpenReview: (r: InspectionRow) => void
   onExportExcel: () => void
   exportDisabled: boolean
@@ -899,6 +936,7 @@ function DetailTable({
                 <tr className="border-y border-buma-border text-left text-[11px] font-bold text-buma-muted">
                   <th className="px-3 py-2 min-w-[96px]">Tanggal</th>
                   <th className="px-2 py-2 min-w-[58px]">Waktu</th>
+                  <th className="px-2 py-2 min-w-[62px] text-center">Site</th>
                   <th className="px-2 py-2 min-w-[120px]">Inspector</th>
                   <th className="px-2 py-2 min-w-[62px]">Shift</th>
                   <th className="px-2 py-2 min-w-[96px]">Pelaksanaan</th>
@@ -950,6 +988,12 @@ function DetailTable({
 
                       <td className="px-2 py-2.5 text-buma-muted whitespace-nowrap">
                         {mode === "DAILY" ? time : "—"}
+                      </td>
+
+                      <td className="px-2 py-2.5 text-center">
+                        <span className="inline-flex rounded-full border border-buma-green/25 bg-buma-green/10 px-2 py-0.5 text-[11px] font-extrabold text-buma-green">
+                          {r.site ?? activeSite}
+                        </span>
                       </td>
 
                       <td className="px-2 py-2.5 font-medium">
@@ -1083,10 +1127,12 @@ function DetailTable({
 function ReviewDetailModal({
   open,
   row,
+  activeSite,
   onClose,
 }: {
   open: boolean
   row: InspectionRow | null
+  activeSite: SiteCode
   onClose: () => void
 }) {
   const [loading, setLoading] = useState(false)
@@ -1107,7 +1153,7 @@ function ReviewDetailModal({
     ; (async () => {
       const base = row
 
-      const j1 = await fetchInspectionDetail(row.id, ac.signal)
+      const j1 = await fetchInspectionDetail(row.id, activeSite, ac.signal)
       const data1 = j1?.data ?? j1
 
       const mapped = data1 ? mapInspection(data1) : base
@@ -1135,12 +1181,12 @@ function ReviewDetailModal({
           : []
 
       if (!linesArr.length) {
-        const fallbackLines = await fetchInspectionLines(row.id, ac.signal)
+        const fallbackLines = await fetchInspectionLines(row.id, activeSite, ac.signal)
         linesArr = Array.isArray(fallbackLines) ? fallbackLines : []
       }
 
       const mappedLines = linesArr.length ? mapReviewLines(linesArr) : undefined
-      const photoUrl = await fetchMeasurePhoto(row.id, ac.signal)
+      const photoUrl = await fetchMeasurePhoto(row.id, activeSite, ac.signal)
 
       if (ac.signal.aborted) return
 
@@ -1158,7 +1204,7 @@ function ReviewDetailModal({
     })
 
     return () => ac.abort()
-  }, [open, row])
+  }, [open, row, activeSite])
 
   if (!open || !row) return null
 
@@ -1280,6 +1326,7 @@ function ReviewDetailModal({
                 ) : null}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <MetaCard k="Site" v={active.site ?? activeSite} />
                   <MetaCard k="Mode" v={viewLabel(active.dashboardView)} />
                   <MetaCard k="Inspector" v={active.inspector} />
                   <MetaCard k="Shift" v={shiftLabel(active.shift)} />
@@ -1623,6 +1670,7 @@ function ReviewDetailModal({
 export default function Dashboard() {
   const [mode, setMode] = useState<"DAILY" | "WEEKLY">("DAILY")
   const [currentView, setCurrentView] = useState<DashboardView>("FRONT")
+  const [activeSite, setActiveSite] = useState<SiteCode>(() => getSessionSite())
 
   function todayYMD() {
     const d = new Date()
@@ -1684,7 +1732,10 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
     setLoading(true)
     setError(null)
 
-    fetchInspections(ac.signal)
+    const site = getSessionSite()
+    setActiveSite(site)
+
+    fetchInspections(site, ac.signal)
       .then((rows) => {
         if (ac.signal.aborted) return
         setInspectionsAll(rows)
@@ -1699,7 +1750,7 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
       })
 
     return () => ac.abort()
-  }, [])
+  }, [activeSite])
 
   const timeFiltered = useMemo(() => {
     if (mode === "DAILY") {
@@ -1736,7 +1787,7 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
   ): Promise<Array<{ label: string; height_m: number | null; ok: boolean | null }>> {
     try {
       const r = await fetch(
-        `${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(inspectionId)}`,
+        `${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(inspectionId)}&site=${encodeURIComponent(activeSite)}`,
         { method: "GET" }
       )
       if (!r.ok) return []
@@ -1757,7 +1808,7 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
   async function fetchPhotoUrl(inspectionId: string): Promise<string | null> {
     try {
       const r = await fetch(
-        `${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}`
+        `${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}&site=${encodeURIComponent(activeSite)}`
       )
       if (!r.ok) return null
 
@@ -1836,6 +1887,7 @@ const [disposalTrend, setDisposalTrend] = useState<Array<{ label: string; value:
 
 return {
   mode_dashboard: viewLabel(currentView),
+  site: x.site ?? activeSite,
   inspection_id: x.id,
   tanggal: date,
   waktu: mode === "DAILY" ? time : "—",
@@ -2148,11 +2200,12 @@ wsAnalyst["!cols"] = [
             <div>
               <div className="text-2xl font-extrabold tracking-tight text-buma-text">Dashboard Operasional</div>
               <div className="mt-1 text-sm text-buma-muted">
-                Monitoring kepatuhan tinggi jenjang & ringkasan verifikasi per mode operasional.
+                Monitoring kepatuhan tinggi jenjang & ringkasan verifikasi per mode operasional sesuai site aktif.
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <StatPill label="Site Aktif" value={activeSite} tone="ok" />
               <StatPill label="Mode Area" value={viewLabel(currentView)} tone="info" />
               <StatPill label="Total Garis" value={`${compliance.total}`} tone="info" />
               <StatPill label="Diverifikasi" value={`${compliance.verified}`} tone="info" />
@@ -2334,12 +2387,13 @@ wsAnalyst["!cols"] = [
               exportDisabled={loading || inspections.length === 0}
               exportBusy={isExporting}
               exportMsg={exportMsg}
+              activeSite={activeSite}
             />
           </div>
         </>
       )}
 
-      <ReviewDetailModal open={reviewOpen} row={reviewRow} onClose={closeReview} />
+      <ReviewDetailModal open={reviewOpen} row={reviewRow} activeSite={activeSite} onClose={closeReview} />
     </AppLayout>
   )
 }

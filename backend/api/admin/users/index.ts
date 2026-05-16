@@ -8,6 +8,7 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   const allowedOrigins = [
     "http://localhost:5173",
     "https://tinggijenjang.vercel.app",
+    "https://tinggijenjang-space.vercel.app",
   ]
 
   if (allowedOrigins.includes(origin)) {
@@ -38,7 +39,18 @@ function parseBody(req: VercelRequest): Record<string, any> | null {
 }
 
 const ALLOWED_ROLES = ["USER", "ADMIN"] as const
-const ALLOWED_OPERATIONAL_ACCESS = ["NONE", "FIELD", "PJA"] as const
+const ALLOWED_OPERATIONAL_ACCESS = ["NONE", "FIELD", "PJA", "ALL"] as const
+const ALLOWED_SITES = ["LAT", "IPR", "SDJ", "ADT"] as const
+
+function normalizeSite(value: any) {
+  const site = String(value || "LAT").trim().toUpperCase()
+
+  if (ALLOWED_SITES.includes(site as (typeof ALLOWED_SITES)[number])) {
+    return site
+  }
+
+  return "LAT"
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res)
@@ -51,12 +63,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data, error } = await supabaseAdmin
         .from("app_users")
         .select(
-          "id, username, role, operational_access, is_active, created_at, updated_at"
+          "id, username, role, operational_access, site, is_active, created_at, updated_at"
         )
         .order("created_at", { ascending: false })
 
       if (error) return res.status(500).json({ error: error.message })
-      return res.status(200).json({ data: data || [] })
+
+      return res.status(200).json({
+        data: (data || []).map((user) => ({
+          ...user,
+          site: normalizeSite(user.site),
+        })),
+      })
     }
 
     if (req.method === "POST") {
@@ -67,8 +85,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const password = String(body.password ?? "").trim()
       const role = String(body.role ?? "").trim().toUpperCase()
       const operationalAccess = String(
-        body.operational_access ?? "NONE"
-      ).trim().toUpperCase()
+        body.operational_access ?? body.operationalAccess ?? "NONE"
+      )
+        .trim()
+        .toUpperCase()
+      const site = normalizeSite(body.site ?? body.siteCode ?? body.activeSite)
 
       if (!username || !password || !role) {
         return res
@@ -107,7 +128,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         username,
         password_hash: hashPassword(password),
         role,
-        operational_access: role === "ADMIN" ? "NONE" : operationalAccess,
+        operational_access: role === "ADMIN" ? "ALL" : operationalAccess,
+        site,
         is_active: true,
       }
 
@@ -115,12 +137,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from("app_users")
         .insert(payload)
         .select(
-          "id, username, role, operational_access, is_active, created_at, updated_at"
+          "id, username, role, operational_access, site, is_active, created_at, updated_at"
         )
         .single()
 
       if (error) return res.status(500).json({ error: error.message })
-      return res.status(201).json({ data })
+
+      return res.status(201).json({
+        data: {
+          ...data,
+          site: normalizeSite(data.site),
+        },
+      })
     }
 
     return res.status(405).json({ error: "Method not allowed" })

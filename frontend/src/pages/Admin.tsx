@@ -8,7 +8,15 @@ const LS_KEY = "mt_session_v1"
 
 type ActiveRole = "FIELD" | "PJA" | "EVALUATOR"
 type AccountRole = "USER" | "ADMIN"
-type OperationalAccess = "NONE" | "FIELD" | "PJA"
+type OperationalAccess = "NONE" | "FIELD" | "PJA" | "ALL"
+type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
+
+const SITE_OPTIONS: { code: SiteCode; label: string }[] = [
+  { code: "LAT", label: "LAT" },
+  { code: "IPR", label: "IPR" },
+  { code: "SDJ", label: "SDJ" },
+  { code: "ADT", label: "ADT" },
+]
 
 type SessionData = {
   id?: string | null
@@ -16,6 +24,11 @@ type SessionData = {
   accountRole?: AccountRole
   operationalAccess?: OperationalAccess
   activeRole?: ActiveRole | null
+  site?: SiteCode | string | null
+  siteCode?: SiteCode | string | null
+  activeSite?: SiteCode | string | null
+  selectedSite?: SiteCode | string | null
+  workspaceSite?: SiteCode | string | null
   ts?: number
 }
 
@@ -32,6 +45,11 @@ type UserRow = {
   username: string
   role: AccountRole | string
   operational_access?: OperationalAccess
+  site?: SiteCode | string | null
+  site_code?: SiteCode | string | null
+  active_site?: SiteCode | string | null
+  selected_site?: SiteCode | string | null
+  workspace_site?: SiteCode | string | null
   is_active?: boolean
   created_at?: string
   updated_at?: string
@@ -64,6 +82,30 @@ function formatDateLabel(value?: string) {
 function formatNumber(value?: number | null) {
   if (typeof value !== "number") return "0"
   return new Intl.NumberFormat("id-ID").format(value)
+}
+
+function normalizeText(value?: string | null) {
+  return String(value || "").trim().toUpperCase()
+}
+
+function isSiteCode(value?: string | null): value is SiteCode {
+  const clean = normalizeText(value)
+  return clean === "LAT" || clean === "IPR" || clean === "SDJ" || clean === "ADT"
+}
+
+function getUserSite(user?: UserRow | null): SiteCode {
+  const rawSite =
+    user?.site ||
+    user?.site_code ||
+    user?.active_site ||
+    user?.selected_site ||
+    user?.workspace_site
+
+  const clean = normalizeText(rawSite)
+
+  if (isSiteCode(clean)) return clean
+
+  return "LAT"
 }
 
 async function readJsonSafe(res: Response) {
@@ -173,7 +215,7 @@ export default function Admin() {
   const session = useMemo(() => getSession(), [])
   const username = session?.username || ""
   const accountRole = session?.accountRole
-  const isAdminAccount = accountRole === "ADMIN"
+  const isAdminAccount = String(accountRole || "").toUpperCase() === "ADMIN"
 
   const [bootLoading, setBootLoading] = useState(true)
 
@@ -192,6 +234,7 @@ export default function Admin() {
   const [newRole, setNewRole] = useState<AccountRole>("USER")
   const [newOperationalAccess, setNewOperationalAccess] =
     useState<OperationalAccess>("NONE")
+  const [newSite, setNewSite] = useState<SiteCode>("LAT")
 
   const [err, setErr] = useState("")
   const [msg, setMsg] = useState("")
@@ -334,7 +377,8 @@ export default function Admin() {
           password: newPassword.trim(),
           role: newRole,
           operational_access:
-            newRole === "ADMIN" ? "NONE" : newOperationalAccess,
+            newRole === "ADMIN" ? "ALL" : newOperationalAccess,
+          site: newSite,
         }),
       })
 
@@ -348,6 +392,7 @@ export default function Admin() {
       setNewPassword("")
       setNewRole("USER")
       setNewOperationalAccess("NONE")
+      setNewSite("LAT")
 
       await loadUsers()
     } catch (e: any) {
@@ -362,6 +407,7 @@ export default function Admin() {
     patch: Partial<{
       role: AccountRole
       operational_access: OperationalAccess
+      site: SiteCode
       is_active: boolean
       password: string
     }>,
@@ -470,7 +516,7 @@ export default function Admin() {
       {
         role: nextRole,
         operational_access:
-          nextRole === "ADMIN" ? "NONE" : user.operational_access ?? "NONE",
+          nextRole === "ADMIN" ? "ALL" : user.operational_access ?? "NONE",
       },
       `Role ${user.username} berhasil diubah menjadi ${roleLabel}`,
       "role"
@@ -488,6 +534,17 @@ export default function Admin() {
       },
       `Akses ${user.username} berhasil diperbarui`,
       "access"
+    )
+  }
+
+  async function handleChangeSite(user: UserRow, site: SiteCode) {
+    await handleUpdateUser(
+      user,
+      {
+        site,
+      },
+      `Site ${user.username} berhasil diubah menjadi ${site}`,
+      "site"
     )
   }
 
@@ -634,7 +691,7 @@ export default function Admin() {
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Tambah user baru, ubah role user/admin, atur akses operasional,
+                  Tambah user baru, ubah role user/admin, atur site, atur akses operasional,
                   aktif-nonaktifkan akun, dan reset password.
                 </p>
               </div>
@@ -660,7 +717,7 @@ export default function Admin() {
                     className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                   />
 
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <select
                       value={newRole}
                       onChange={(e) => {
@@ -668,7 +725,7 @@ export default function Admin() {
                         setNewRole(value)
 
                         if (value === "ADMIN") {
-                          setNewOperationalAccess("NONE")
+                          setNewOperationalAccess("ALL")
                         }
                       }}
                       className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
@@ -690,6 +747,19 @@ export default function Admin() {
                       <option value="NONE">NONE</option>
                       <option value="FIELD">FIELD</option>
                       <option value="PJA">PJA</option>
+                      <option value="ALL">ALL</option>
+                    </select>
+
+                    <select
+                      value={newSite}
+                      onChange={(e) => setNewSite(e.target.value as SiteCode)}
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    >
+                      {SITE_OPTIONS.map((site) => (
+                        <option key={site.code} value={site.code}>
+                          {site.label}
+                        </option>
+                      ))}
                     </select>
 
                     <button
@@ -754,6 +824,7 @@ export default function Admin() {
                               ? "ADMIN"
                               : "USER"
                           const rowBusy = actionBusy?.endsWith(`:${u.id}`)
+                          const currentSite = getUserSite(u)
 
                           return (
                             <div
@@ -804,6 +875,26 @@ export default function Admin() {
 
                                 <div>
                                   <label className="mb-1 block text-xs font-bold text-slate-500">
+                                    Site
+                                  </label>
+                                  <select
+                                    value={currentSite}
+                                    disabled={anyUserActionBusy}
+                                    onChange={(e) =>
+                                      handleChangeSite(u, e.target.value as SiteCode)
+                                    }
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+                                  >
+                                    {SITE_OPTIONS.map((site) => (
+                                      <option key={site.code} value={site.code}>
+                                        {site.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="mb-1 block text-xs font-bold text-slate-500">
                                     Akses Operasional
                                   </label>
 
@@ -826,6 +917,7 @@ export default function Admin() {
                                       <option value="NONE">NONE</option>
                                       <option value="FIELD">FIELD</option>
                                       <option value="PJA">PJA</option>
+                                      <option value="ALL">ALL</option>
                                     </select>
                                   )}
                                 </div>
@@ -879,6 +971,9 @@ export default function Admin() {
                               Username
                             </th>
                             <th className="px-4 py-3 text-left font-bold text-slate-600">
+                              Site
+                            </th>
+                            <th className="px-4 py-3 text-left font-bold text-slate-600">
                               Role Akun
                             </th>
                             <th className="px-4 py-3 text-left font-bold text-slate-600">
@@ -904,6 +999,7 @@ export default function Admin() {
                                 ? "ADMIN"
                                 : "USER"
                             const rowBusy = actionBusy?.endsWith(`:${u.id}`)
+                            const currentSite = getUserSite(u)
 
                             return (
                               <tr
@@ -917,6 +1013,23 @@ export default function Admin() {
                                   <div className="mt-1 text-[11px] text-slate-500">
                                     Dibuat: {formatDateLabel(u.created_at)}
                                   </div>
+                                </td>
+
+                                <td className="px-4 py-3 text-slate-700">
+                                  <select
+                                    value={currentSite}
+                                    disabled={anyUserActionBusy}
+                                    onChange={(e) =>
+                                      handleChangeSite(u, e.target.value as SiteCode)
+                                    }
+                                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+                                  >
+                                    {SITE_OPTIONS.map((site) => (
+                                      <option key={site.code} value={site.code}>
+                                        {site.label}
+                                      </option>
+                                    ))}
+                                  </select>
                                 </td>
 
                                 <td className="px-4 py-3 text-slate-700">
@@ -956,6 +1069,7 @@ export default function Admin() {
                                       <option value="NONE">NONE</option>
                                       <option value="FIELD">FIELD</option>
                                       <option value="PJA">PJA</option>
+                                      <option value="ALL">ALL</option>
                                     </select>
                                   )}
                                 </td>

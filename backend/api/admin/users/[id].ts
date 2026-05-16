@@ -8,6 +8,7 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   const allowedOrigins = [
     "http://localhost:5173",
     "https://tinggijenjang.vercel.app",
+    "https://tinggijenjang-space.vercel.app",
   ]
 
   if (allowedOrigins.includes(origin)) {
@@ -38,7 +39,18 @@ function parseBody(req: VercelRequest): Record<string, any> | null {
 }
 
 const ALLOWED_ROLES = ["USER", "ADMIN"] as const
-const ALLOWED_OPERATIONAL_ACCESS = ["NONE", "FIELD", "PJA"] as const
+const ALLOWED_OPERATIONAL_ACCESS = ["NONE", "FIELD", "PJA", "ALL"] as const
+const ALLOWED_SITES = ["LAT", "IPR", "SDJ", "ADT"] as const
+
+function normalizeSite(value: any) {
+  const site = String(value || "LAT").trim().toUpperCase()
+
+  if (ALLOWED_SITES.includes(site as (typeof ALLOWED_SITES)[number])) {
+    return site
+  }
+
+  return "LAT"
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res)
@@ -59,12 +71,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Invalid JSON body" })
     }
 
-    const {
-      data: existingUser,
-      error: existingUserError,
-    } = await supabaseAdmin
+    const { data: existingUser, error: existingUserError } = await supabaseAdmin
       .from("app_users")
-      .select("id, username, role, operational_access")
+      .select("id, username, role, operational_access, site")
       .eq("id", id)
       .single()
 
@@ -92,8 +101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       patch.role = role
     }
 
-    if (body.operational_access != null) {
-      const operationalAccess = String(body.operational_access)
+    if (body.operational_access != null || body.operationalAccess != null) {
+      const operationalAccess = String(
+        body.operational_access ?? body.operationalAccess
+      )
         .trim()
         .toUpperCase()
 
@@ -109,6 +120,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       patch.operational_access = operationalAccess
     }
 
+    if (
+      body.site != null ||
+      body.siteCode != null ||
+      body.activeSite != null ||
+      body.selectedSite != null ||
+      body.workspaceSite != null
+    ) {
+      patch.site = normalizeSite(
+        body.site ??
+          body.siteCode ??
+          body.activeSite ??
+          body.selectedSite ??
+          body.workspaceSite
+      )
+    }
+
     if (body.is_active != null) {
       patch.is_active = !!body.is_active
     }
@@ -122,8 +149,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (nextRole === "ADMIN") {
-      patch.operational_access = "NONE"
-    } else if (body.operational_access == null) {
+      patch.operational_access = "ALL"
+    } else if (body.operational_access == null && body.operationalAccess == null) {
       patch.operational_access = nextOperationalAccess
     }
 
@@ -132,13 +159,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .update(patch)
       .eq("id", id)
       .select(
-        "id, username, role, operational_access, is_active, created_at, updated_at"
+        "id, username, role, operational_access, site, is_active, created_at, updated_at"
       )
       .single()
 
     if (error) return res.status(500).json({ error: error.message })
 
-    return res.status(200).json({ data })
+    return res.status(200).json({
+      data: {
+        ...data,
+        site: normalizeSite(data.site),
+      },
+    })
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Internal error" })
   }

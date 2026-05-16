@@ -24,6 +24,7 @@ type ReviewStatus = "PENDING" | "VALID"
 type TabKey = "PENDING" | "VALID" | "ALL"
 type InspectionType = "FRONT" | "DISPOSAL" | "ROAD"
 type TypeFilter = "ALL" | InspectionType
+type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
 
 type InspectionRow = {
   id: string
@@ -43,6 +44,7 @@ type InspectionRow = {
   ref_verify_ok?: boolean | null
   ref_verify_meter?: number | null
   type: InspectionType
+  site: SiteCode
 }
 
 type MeasureRow = {
@@ -67,14 +69,60 @@ type LineItem = { label: string; heightM: number | null; ok?: boolean | null }
 
 const DISPOSAL_REF_UNITS = new Set(["D155", "D375", "HD789", "HD785", "HD777"])
 
+function normalizeText(value?: string | null) {
+  return String(value || "").trim().toUpperCase()
+}
+
+function isSiteCode(value?: string | null): value is SiteCode {
+  const clean = normalizeText(value)
+  return clean === "LAT" || clean === "IPR" || clean === "SDJ" || clean === "ADT"
+}
+
+function normalizeSite(value?: string | null): SiteCode {
+  const clean = normalizeText(value)
+  return isSiteCode(clean) ? clean : "LAT"
+}
+
 function getSession() {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as { role?: string; username?: string }
+
+    const parsed = JSON.parse(raw) as {
+      role?: string
+      username?: string
+      site?: string | null
+      siteCode?: string | null
+      activeSite?: string | null
+      selectedSite?: string | null
+      workspaceSite?: string | null
+      area?: string | null
+      mineSite?: string | null
+    }
+
+    return parsed
   } catch {
     return null
   }
+}
+
+function getSessionSite(): SiteCode {
+  const s = getSession()
+
+  return normalizeSite(
+    s?.activeSite ||
+      s?.selectedSite ||
+      s?.workspaceSite ||
+      s?.site ||
+      s?.siteCode ||
+      s?.area ||
+      s?.mineSite
+  )
+}
+
+function withSiteQuery(url: string, site: SiteCode) {
+  const sep = url.includes("?") ? "&" : "?"
+  return `${url}${sep}site=${encodeURIComponent(site)}`
 }
 
 function cls(...xs: Array<string | false | null | undefined>) {
@@ -304,6 +352,7 @@ function SubmitResultCard({
 export default function PjaDashboard() {
   const session = getSession()
   const pjaName = session?.username ? session.username : "PJA"
+  const activeSite = getSessionSite()
 
   const [rows, setRows] = useState<InspectionRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -362,7 +411,7 @@ export default function PjaDashboard() {
     setLoadErr(null)
 
     try {
-      const r = await fetch(`${API_BASE}/api/inspections`, { method: "GET" })
+      const r = await fetch(withSiteQuery(`${API_BASE}/api/inspections`, activeSite), { method: "GET" })
       if (!r.ok) throw new Error(await r.text())
       const j = await r.json()
 
@@ -407,6 +456,7 @@ export default function PjaDashboard() {
         ref_verify_meter:
           x.ref_verify_meter != null ? Number(x.ref_verify_meter) : null,
         type: inferInspectionType(x),
+        site: normalizeSite(x.site ?? x.siteCode ?? x.activeSite ?? x.selectedSite ?? x.workspaceSite),
       }))
 
       setRows(mapped)
@@ -422,7 +472,7 @@ export default function PjaDashboard() {
 
   useEffect(() => {
     void fetchInspections()
-  }, [])
+  }, [activeSite])
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -436,7 +486,7 @@ export default function PjaDashboard() {
     }, AUTO_REFRESH_MS)
 
     return () => window.clearInterval(timer)
-  }, [autoRefresh, open, isSubmitting, isDeleting, submitStatus])
+  }, [autoRefresh, open, isSubmitting, isDeleting, submitStatus, activeSite])
 
   const counts = useMemo(() => {
     const c = { ALL: rows.length, PENDING: 0, VALID: 0 }
@@ -500,7 +550,7 @@ export default function PjaDashboard() {
 
     try {
       const r = await fetch(
-        `${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}`,
+        `${API_BASE}/api/measures?inspection_id=${encodeURIComponent(inspectionId)}&site=${encodeURIComponent(activeSite)}`,
         { method: "GET" }
       )
       if (!r.ok) throw new Error(await r.text())
@@ -548,7 +598,7 @@ export default function PjaDashboard() {
   ): Promise<LineItem[]> {
     try {
       const r2 = await fetch(
-        `${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(inspectionId)}`,
+        `${API_BASE}/api/inspection-lines?inspection_id=${encodeURIComponent(inspectionId)}&site=${encodeURIComponent(activeSite)}`,
         { method: "GET" }
       )
       if (r2.ok) {
@@ -677,6 +727,11 @@ export default function PjaDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           inspection_id: active.id,
+          site: activeSite,
+          siteCode: activeSite,
+          activeSite,
+          selectedSite: activeSite,
+          workspaceSite: activeSite,
           lines: payloadLines,
         }),
       })
@@ -692,6 +747,11 @@ export default function PjaDashboard() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          site: activeSite,
+          siteCode: activeSite,
+          activeSite,
+          selectedSite: activeSite,
+          workspaceSite: activeSite,
           review_status: "VALID",
           reviewed_by: pjaName,
           review_notes: notes?.trim() ? notes.trim() : null,
@@ -740,9 +800,10 @@ export default function PjaDashboard() {
       setSubmitStatus("loading")
       setSubmitMsg("Menghapus data inspeksi...")
 
-      const r = await fetch(`${API_BASE}/api/inspections/${encodeURIComponent(active.id)}`, {
-        method: "DELETE",
-      })
+      const r = await fetch(
+        `${API_BASE}/api/inspections/${encodeURIComponent(active.id)}?site=${encodeURIComponent(activeSite)}`,
+        { method: "DELETE" }
+      )
 
       const result = await r.json().catch(() => null)
       if (!r.ok) {
@@ -819,17 +880,27 @@ export default function PjaDashboard() {
                   Dashboard Verifikasi Tinggi Jenjang
                 </div>
                 <div className="mt-1 text-sm text-white/80">
-                  Menampilkan hasil submit inspector.
+                  Menampilkan hasil submit inspector untuk site aktif.
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-right backdrop-blur">
-                <div className="text-xs text-white/70">Login sebagai</div>
-                <div className="text-sm font-extrabold text-white">{pjaName}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-right backdrop-blur">
+                  <div className="text-xs text-white/70">Site Aktif</div>
+                  <div className="text-sm font-extrabold text-white">{activeSite}</div>
+                </div>
+
+                <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-right backdrop-blur">
+                  <div className="text-xs text-white/70">Login sebagai</div>
+                  <div className="text-sm font-extrabold text-white">{pjaName}</div>
+                </div>
               </div>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-extrabold text-white/85 backdrop-blur">
+                Site: {activeSite}
+              </span>
               <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-extrabold text-white/85 backdrop-blur">
                 Pending: {counts.PENDING}
               </span>
@@ -957,7 +1028,7 @@ export default function PjaDashboard() {
 
             {loadErr ? (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                Gagal load data: {loadErr}
+                Gagal load data site {activeSite}: {loadErr}
               </div>
             ) : null}
           </div>
@@ -981,6 +1052,7 @@ export default function PjaDashboard() {
                 <tr className="border-y border-buma-border text-left text-buma-muted">
                   <th className="px-4 py-3">Tanggal</th>
                   <th className="py-3">Waktu</th>
+                  <th className="py-3">Site</th>
                   <th className="py-3">Type</th>
                   <th className="py-3">Inspector</th>
                   <th className="py-3">Shift</th>
@@ -996,7 +1068,7 @@ export default function PjaDashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-4 py-8 text-center text-buma-muted" colSpan={11}>
+                    <td className="px-4 py-8 text-center text-buma-muted" colSpan={12}>
                       Loading…
                     </td>
                   </tr>
@@ -1014,6 +1086,12 @@ export default function PjaDashboard() {
                         <tr key={x.id} className="border-b border-buma-border hover:bg-black/5">
                           <td className="px-4 py-3 font-semibold">{date}</td>
                           <td className="py-3 text-buma-muted">{time}</td>
+
+                          <td className="py-3">
+                            <span className="inline-flex rounded-full border border-buma-green/30 bg-buma-green/10 px-2.5 py-1 text-[10px] font-extrabold tracking-widest text-buma-green">
+                              {x.site}
+                            </span>
+                          </td>
 
                           <td className="py-3">
                             <span
@@ -1091,7 +1169,7 @@ export default function PjaDashboard() {
 
                     {filtered.length === 0 ? (
                       <tr>
-                        <td className="px-4 py-8 text-center text-buma-muted" colSpan={11}>
+                        <td className="px-4 py-8 text-center text-buma-muted" colSpan={12}>
                           Tidak ada data sesuai filter.
                         </td>
                       </tr>
@@ -1140,6 +1218,8 @@ export default function PjaDashboard() {
                       </span>
                       <span>•</span>
                       <span>{active.inspector}</span>
+                      <span>•</span>
+                      <span className="font-extrabold text-buma-green">{active.site}</span>
                       <span
                         className={cls(
                           "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold tracking-widest",
@@ -1218,6 +1298,7 @@ export default function PjaDashboard() {
                     ) : null}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <MetaCard k="Site" v={active.site} />
                       <MetaCard k="Type" v={typeLabel(active.type)} />
                       <MetaCard k="Inspector" v={active.inspector} />
                       <MetaCard k="Shift" v={shiftLabel(active.shift)} />

@@ -8,6 +8,7 @@ function setCors(req: VercelRequest, res: VercelResponse) {
   const allowedOrigins = [
     "http://localhost:5173",
     "https://tinggijenjang.vercel.app",
+    "https://tinggijenjang-space.vercel.app",
   ]
 
   if (allowedOrigins.includes(origin)) {
@@ -37,6 +38,14 @@ function parseBody(req: VercelRequest): Record<string, any> | null {
   return {}
 }
 
+function normalizeSite(value: any) {
+  const site = String(value || "LAT").trim().toUpperCase()
+  if (site === "LAT" || site === "IPR" || site === "SDJ" || site === "ADT") {
+    return site
+  }
+  return "LAT"
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(req, res)
 
@@ -61,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: user, error } = await supabaseAdmin
       .from("app_users")
       .select(
-        "id, username, password_hash, role, operational_access, is_active"
+        "id, username, password_hash, role, operational_access, site, is_active"
       )
       .eq("username", username)
       .maybeSingle()
@@ -72,6 +81,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const ok = verifyPassword(password, user.password_hash)
     if (!ok) return res.status(401).json({ error: "Username atau password salah" })
+
+    const site = normalizeSite(user.site)
 
     setAuthCookie(res, {
       id: user.id,
@@ -85,6 +96,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         username: user.username,
         role: user.role,
         operationalAccess: user.operational_access ?? "NONE",
+        site,
+        siteCode: site,
+        activeSite: site,
+        selectedSite: site,
+        workspaceSite: site,
       },
     })
   } catch (e: any) {

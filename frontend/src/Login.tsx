@@ -6,21 +6,116 @@ const LS_KEY = "mt_session_v1"
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ""
 
 type OperationalAccess = "NONE" | "FIELD" | "PJA" | "ALL"
+type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
+
+const SUPER_ADMIN_USERNAMES = ["MFBAB", "Q4IUM"]
+
+/**
+ * Mapping sementara untuk akun yang belum punya kolom site dari backend.
+ * Tambahkan akun lain di sini sesuai arahan superadmin.
+ */
+const USER_SITE_MAP: Record<string, SiteCode> = {
+  V1JWF: "LAT",
+
+  // contoh:
+  // ABCDE: "IPR",
+  // QWERT: "SDJ",
+  // ZXCVB: "ADT",
+}
+
+function normalizeText(value?: string | null) {
+  return String(value || "").trim().toUpperCase()
+}
+
+function isSuperAdminUsername(username?: string | null) {
+  return SUPER_ADMIN_USERNAMES.includes(normalizeText(username))
+}
+
+function isSiteCode(value?: string | null): value is SiteCode {
+  const clean = normalizeText(value)
+  return clean === "LAT" || clean === "IPR" || clean === "SDJ" || clean === "ADT"
+}
+
+function getUserSite(user: any, username: string): SiteCode {
+  const fromApi =
+    user?.site ||
+    user?.siteCode ||
+    user?.activeSite ||
+    user?.selectedSite ||
+    user?.workspaceSite ||
+    user?.area ||
+    user?.mineSite
+
+  const normalizedFromApi = normalizeText(fromApi)
+
+  if (isSiteCode(normalizedFromApi)) {
+    return normalizedFromApi
+  }
+
+  const normalizedUsername = normalizeText(username)
+
+  if (USER_SITE_MAP[normalizedUsername]) {
+    return USER_SITE_MAP[normalizedUsername]
+  }
+
+  return "LAT"
+}
+
+function normalizeOperationalAccess(value?: string | null): OperationalAccess {
+  const clean = normalizeText(value)
+
+  if (clean === "FIELD") return "FIELD"
+  if (clean === "PJA") return "PJA"
+  if (clean === "ALL") return "ALL"
+
+  return "NONE"
+}
+
+function normalizeAccountRole(value?: string | null, username?: string | null) {
+  if (isSuperAdminUsername(username)) return "ADMIN"
+
+  const clean = normalizeText(value)
+
+  if (clean === "ADMIN" || clean === "SUPER_ADMIN") return "ADMIN"
+
+  return "USER"
+}
 
 function saveBaseSession(payload: {
   username: string
   accountRole: string
-  operationalAccess?: OperationalAccess
+  operationalAccess?: OperationalAccess | string
   id?: string
+  site?: SiteCode
 }) {
+  const cleanUsername = normalizeText(payload.username)
+  const isSuperAdmin = isSuperAdminUsername(cleanUsername)
+  const site = payload.site || "LAT"
+
+  const accountRole = isSuperAdmin
+    ? "ADMIN"
+    : normalizeAccountRole(payload.accountRole, cleanUsername)
+
+  const operationalAccess = isSuperAdmin
+    ? "ALL"
+    : normalizeOperationalAccess(payload.operationalAccess)
+
   localStorage.setItem(
     LS_KEY,
     JSON.stringify({
       id: payload.id ?? null,
-      username: payload.username,
-      accountRole: payload.accountRole,
-      operationalAccess: payload.operationalAccess ?? "NONE",
+      username: cleanUsername,
+      accountRole,
+      operationalAccess,
+
       activeRole: null,
+
+      site,
+      siteCode: site,
+      activeSite: site,
+      selectedSite: site,
+      workspaceSite: site,
+
       ts: Date.now(),
     })
   )
@@ -38,74 +133,57 @@ export default function Login() {
     return username.trim().length > 0 && password.trim().length > 0
   }, [username, password])
 
-async function handleLogin() {
-  if (!canProceed || loading) return
+  async function handleLogin() {
+    if (!canProceed || loading) return
 
-  setLoading(true)
+    setLoading(true)
 
-  const cleanUsername = username.trim().toUpperCase()
-  const cleanPassword = password.trim()
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          username: username.trim(),
+          password: password.trim(),
+        }),
+      })
 
-  const localSuperAdmins: Record<string, string> = {
-    Q4IUM: "Q4IUM",
-    MFBAB: "MFBAB",
-  }
+      const data = await res.json()
 
-  if (localSuperAdmins[cleanUsername] === cleanPassword) {
-    saveBaseSession({
-      id: `local-${cleanUsername.toLowerCase()}`,
-      username: cleanUsername,
-      accountRole: "admin",
-      operationalAccess: "ALL",
-    })
+      if (!res.ok) {
+        alert(data?.error || "Login gagal")
+        setLoading(false)
+        return
+      }
 
-    nav("/select-role", { replace: true })
-    return
-  }
+      const user = data?.user
 
-  try {
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        username: username.trim(),
-        password: password.trim(),
-      }),
-    })
+      if (!user?.username || !user?.role) {
+        alert("Respons login tidak valid")
+        setLoading(false)
+        return
+      }
 
-    const data = await res.json()
+      const userSite = getUserSite(user, user.username)
 
-    if (!res.ok) {
-      alert(data?.error || "Login gagal")
+      saveBaseSession({
+        id: user.id,
+        username: user.username,
+        accountRole: user.role,
+        operationalAccess: user.operationalAccess ?? "NONE",
+        site: userSite,
+      })
+
+      nav("/select-role", { replace: true })
+    } catch (err) {
+      console.error("login error:", err)
+      alert("Tidak dapat terhubung ke server")
       setLoading(false)
-      return
     }
-
-    const user = data?.user
-
-    if (!user?.username || !user?.role) {
-      alert("Respons login tidak valid")
-      setLoading(false)
-      return
-    }
-
-saveBaseSession({
-  id: user.id,
-  username: user.username,
-  accountRole: user.role,
-  operationalAccess: user.operationalAccess ?? "NONE",
-})
-
-    nav("/select-role", { replace: true })
-  } catch (err) {
-    console.error("login error:", err)
-    alert("Tidak dapat terhubung ke server")
-    setLoading(false)
   }
-}
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -113,6 +191,7 @@ saveBaseSession({
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/LoginBackground.jpeg')" }}
       />
+
       <motion.div
         className="absolute inset-0 bg-black/60"
         initial={{ opacity: 0 }}
@@ -132,7 +211,7 @@ saveBaseSession({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="lg:hidden pt-10"
+              className="pt-10 lg:hidden"
             >
               <div className="mx-auto flex max-w-md flex-col items-center text-center">
                 <div className="inline-flex items-center gap-3 rounded-2xl border border-white/18 bg-white/10 px-4 py-3 backdrop-blur-md">
@@ -141,7 +220,8 @@ saveBaseSession({
                     alt="PT BUMA Logo"
                     className="h-8 w-auto object-contain"
                   />
-                  <div className="leading-tight text-left">
+
+                  <div className="text-left leading-tight">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/70">
                       Production Division
                     </div>
@@ -157,7 +237,7 @@ saveBaseSession({
               </div>
             </motion.div>
 
-            <div className="hidden lg:flex flex-col justify-center lg:pl-14 xl:pl-20">
+            <div className="hidden flex-col justify-center lg:flex lg:pl-14 xl:pl-20">
               <div className="max-w-lg">
                 <div className="mb-5 inline-flex items-center gap-3 rounded-3xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-2xl">
                   <img
@@ -165,6 +245,7 @@ saveBaseSession({
                     alt="PT BUMA Logo"
                     className="h-9 w-auto object-contain"
                   />
+
                   <div className="leading-tight">
                     <div className="text-xs font-semibold uppercase tracking-[0.26em] text-white/70">
                       Production Division
@@ -178,13 +259,13 @@ saveBaseSession({
                 <div className="relative">
                   <div className="absolute -left-5 top-1 hidden h-24 w-1 rounded-full bg-gradient-to-b from-buma-green via-buma-green/70 to-transparent lg:block" />
 
-                  <h1 className="text-[36px] xl:text-[42px] font-extrabold text-white leading-[1.05] tracking-tight">
+                  <h1 className="text-[36px] font-extrabold leading-[1.05] tracking-tight text-white xl:text-[42px]">
                     Tinggi Jenjang
                     <br className="hidden lg:block" />
                     <span className="text-buma-green">Space</span>
                   </h1>
 
-                  <p className="mt-3 max-w-md text-sm xl:text-base text-white/80 leading-relaxed">
+                  <p className="mt-3 max-w-md text-sm leading-relaxed text-white/80 xl:text-base">
                     Platform pengukuran tinggi jenjang multi-site
                   </p>
 
@@ -210,7 +291,9 @@ saveBaseSession({
 
                   <div className="relative">
                     <div className="mb-6">
-                      <div className="text-xl font-extrabold text-white">Login Sistem</div>
+                      <div className="text-xl font-extrabold text-white">
+                        Login Sistem
+                      </div>
                       <div className="mt-1 text-sm text-white/75">
                         Masuk untuk melanjutkan ke pemilihan role
                       </div>
@@ -219,6 +302,7 @@ saveBaseSession({
                     <label className="block text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
                       Username
                     </label>
+
                     <input
                       disabled={loading}
                       className="mt-2 w-full rounded-xl border border-white/15 bg-white/15 px-3 py-2 text-sm text-white placeholder:text-white/60 outline-none transition focus:border-buma-green/60 focus:ring-2 focus:ring-buma-green/35"
@@ -243,12 +327,17 @@ saveBaseSession({
                         }}
                         placeholder="Masukkan password"
                       />
+
                       <button
                         type="button"
                         disabled={loading}
                         onClick={() => setShowPass((v) => !v)}
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/80 transition hover:bg-white/10 hover:text-white"
-                        title={showPass ? "Sembunyikan password" : "Tampilkan password"}
+                        title={
+                          showPass
+                            ? "Sembunyikan password"
+                            : "Tampilkan password"
+                        }
                       >
                         {showPass ? <EyeOffIcon /> : <EyeIcon />}
                       </button>
@@ -267,13 +356,13 @@ saveBaseSession({
                         hover:-translate-y-[2px]
                         active:translate-y-[0px]
                         focus:outline-none focus:ring-2 focus:ring-[#22A745]/45
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        disabled:hover:shadow-none disabled:hover:translate-y-0
+                        disabled:cursor-not-allowed disabled:opacity-50
+                        disabled:hover:translate-y-0 disabled:hover:shadow-none
                       "
                     >
                       {loading ? (
                         <span className="flex items-center justify-center gap-2">
-                          <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
                           Memproses...
                         </span>
                       ) : (

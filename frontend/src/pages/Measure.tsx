@@ -122,6 +122,31 @@ type Shift = "DAY" | "NIGHT"
 
 type BadgeRect = { x: number; y: number; w: number; h: number }
 
+const FRONT_OPTIONS = [
+  "B3610",
+  "B3608",
+  "B3606",
+  "B3605",
+  "S3604",
+  "S3603",
+  "S3602",
+  "S3601",
+  "S4006",
+  "S4004",
+  "B2510",
+  "S2503",
+  "S2501",
+  "B2048",
+  "B2045",
+  "B2042",
+  "B2040",
+  "B2041",
+  "B2036",
+  "B2020",
+  "B2019",
+  "B2012",
+] as const
+
 export default function Measure() {
   // ======= Refs =======
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -597,15 +622,65 @@ ctx.fillText(valueUnit, unitX, textY)
       .filter((x) => Number.isFinite(x.height_m) && x.height_m > 0.01)
   }
 
-  async function canvasToFile(canvas: HTMLCanvasElement) {
-    const blob: Blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
-        "image/png",
-        0.92
-      )
+  function blobFromCanvas(
+    canvas: HTMLCanvasElement,
+    type: string,
+    quality?: number
+  ): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), type, quality)
     })
-    return new File([blob], `highwall-${Date.now()}.png`, { type: "image/png" })
+  }
+
+  function makeCompressedCanvas(canvas: HTMLCanvasElement) {
+    /**
+     * Supabase free storage cepat penuh kalau overlay disimpan sebagai PNG besar.
+     * Jadi file upload dikompres otomatis:
+     * - dimensi dibatasi maksimal 1280 x 720
+     * - format utama WebP
+     * - fallback JPEG/PNG kalau browser tidak support WebP
+     */
+    const MAX_W = 1280
+    const MAX_H = 720
+
+    const ratio = Math.min(1, MAX_W / canvas.width, MAX_H / canvas.height)
+
+    if (ratio >= 1) return canvas
+
+    const out = document.createElement("canvas")
+    out.width = Math.max(1, Math.round(canvas.width * ratio))
+    out.height = Math.max(1, Math.round(canvas.height * ratio))
+
+    const ctx = out.getContext("2d")
+    if (!ctx) return canvas
+
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = "high"
+    ctx.drawImage(canvas, 0, 0, out.width, out.height)
+
+    return out
+  }
+
+  async function canvasToFile(canvas: HTMLCanvasElement) {
+    const compressedCanvas = makeCompressedCanvas(canvas)
+
+    const webp = await blobFromCanvas(compressedCanvas, "image/webp", 0.72)
+    const jpeg = await blobFromCanvas(compressedCanvas, "image/jpeg", 0.78)
+    const png = await blobFromCanvas(compressedCanvas, "image/png", 0.92)
+
+    const candidates = [webp, jpeg, png].filter(Boolean) as Blob[]
+
+    if (!candidates.length) {
+      throw new Error("Gagal mengompres gambar overlay")
+    }
+
+    const bestBlob = candidates.sort((a, b) => a.size - b.size)[0]
+    const mime = bestBlob.type || "image/jpeg"
+
+    const ext =
+      mime.includes("webp") ? "webp" : mime.includes("jpeg") || mime.includes("jpg") ? "jpg" : "png"
+
+    return new File([bestBlob], `highwall-${Date.now()}.${ext}`, { type: mime })
   }
 
   async function createInspection(): Promise<string> {
@@ -1040,19 +1115,25 @@ ctx.fillText(valueUnit, unitX, textY)
     Front (Unit Loader)<span className="text-buma-orange">*</span>
   </label>
 
-  <input
+ <select
     value={areaId}
     onChange={(e) => {
       setAreaId(e.target.value)
       setFormError(false)
     }}
-    placeholder="Masukkan Front, contoh: B2503"
     className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition bg-white ${
-      formError && !areaId.trim()
+      formError && !areaId
         ? "border-red-500"
         : "border-buma-border focus:border-buma-green/60"
     }`}
-  />
+  >
+    <option value="">— Pilih area / front —</option>
+    {FRONT_OPTIONS.map((front) => (
+      <option key={front} value={front}>
+        {front}
+      </option>
+    ))}
+  </select>
 </div>
 
               {/* NEW: Shift DAY/NIGHT */}

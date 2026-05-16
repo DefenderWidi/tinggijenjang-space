@@ -7,7 +7,10 @@ import { supabaseAdmin } from "../_lib/supabaseAdmin.js"
 function setCors(res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  )
   res.setHeader("Access-Control-Max-Age", "86400")
 }
 
@@ -41,8 +44,45 @@ function pickFirstNonEmpty(...values: unknown[]) {
   return null
 }
 
+type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
 type Shift = "DAY" | "NIGHT"
 type ReviewStatus = "PENDING" | "VALID" | "REJECT"
+
+function normalizeSite(value: any): SiteCode {
+  const site = String(value || "LAT").trim().toUpperCase()
+
+  if (site === "LAT" || site === "IPR" || site === "SDJ" || site === "ADT") {
+    return site
+  }
+
+  return "LAT"
+}
+
+function getSiteFromBody(body: Record<string, any>): SiteCode {
+  return normalizeSite(
+    body?.site ??
+      body?.siteCode ??
+      body?.activeSite ??
+      body?.selectedSite ??
+      body?.workspaceSite ??
+      body?.area ??
+      body?.mineSite
+  )
+}
+
+function getSiteFromQuery(req: VercelRequest): SiteCode | null {
+  const raw =
+    req.query.site ??
+    req.query.siteCode ??
+    req.query.activeSite ??
+    req.query.selectedSite ??
+    req.query.workspaceSite
+
+  if (raw == null) return null
+
+  const site = normalizeSite(Array.isArray(raw) ? raw[0] : raw)
+  return site
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res)
@@ -50,14 +90,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // =========================
-    // GET /api/inspections
+    // GET /api/inspections?site=LAT
     // =========================
     if (req.method === "GET") {
-      const { data: inspections, error: e1 } = await supabaseAdmin
+      const siteFilter = getSiteFromQuery(req)
+
+      let query = supabaseAdmin
         .from("inspections")
         .select("*")
         .order("inspected_at", { ascending: false })
         .limit(300)
+
+      if (siteFilter) {
+        query = query.eq("site", siteFilter)
+      }
+
+      const { data: inspections, error: e1 } = await query
 
       if (e1) return res.status(500).json({ error: e1.message })
 
@@ -66,7 +114,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const ids = rows.map((r: any) => r.id).filter(Boolean)
 
-      // AMAN: ambil semua kolom, jangan sebut nama kolom mode satu-satu
       const { data: measures, error: e2 } = await supabaseAdmin
         .from("inspection_measures")
         .select("*")
@@ -76,11 +123,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (e2) {
         console.error("api/inspections measures lookup error:", e2)
-        return res.status(200).json({ data: rows })
+        return res.status(200).json({
+          data: rows.map((r: any) => {
+            const site = normalizeSite(r?.site)
+            return {
+              ...r,
+              site,
+              siteCode: site,
+              activeSite: site,
+              selectedSite: site,
+              workspaceSite: site,
+            }
+          }),
+        })
       }
 
-      // latest measure per inspection_id
       const latestByInspection = new Map<string, any>()
+
       for (const m of measures ?? []) {
         const k = String((m as any).inspection_id ?? "")
         if (!k) continue
@@ -92,7 +151,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const merged = rows.map((r: any) => {
         const m = latestByInspection.get(String(r.id)) ?? {}
 
-        // baca mode secara fleksibel dari berbagai kemungkinan nama kolom
         const mergedInspectionMode = pickFirstNonEmpty(
           r?.inspection_mode,
           r?.inspectionMode,
@@ -126,8 +184,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           mergedMeasureMode
         )
 
+        const site = normalizeSite(
+          pickFirstNonEmpty(
+            r?.site,
+            r?.siteCode,
+            r?.activeSite,
+            r?.selectedSite,
+            r?.workspaceSite,
+            m?.site
+          )
+        )
+
         return {
           ...r,
+          site,
+          siteCode: site,
+          activeSite: site,
+          selectedSite: site,
+          workspaceSite: site,
           ref_unit: pickFirstNonEmpty(r?.ref_unit, r?.refUnit, m?.ref_unit, m?.refUnit),
           ref_meter: pickFirstNonEmpty(r?.ref_meter, r?.refMeter, m?.ref_meter, m?.refMeter),
           dashboard_view: mergedDashboardView,
@@ -146,6 +220,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = parseBody(req)
       if (body === null) return res.status(400).json({ error: "Invalid JSON body" })
 
+      const site = getSiteFromBody(body)
+
       const shift: Shift | null =
         body?.shift === "DAY" || body?.shift === "NIGHT" ? body.shift : null
 
@@ -156,8 +232,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ? body.review_status
           : "PENDING"
 
-      // tetap pakai payload aman sesuai schema inspections yang sudah pasti ada
       const payload = {
+        site,
         inspector: String(body?.inspector ?? "").trim(),
         shift,
         pelaksanaan: String(body?.pelaksanaan ?? "").trim(),
@@ -187,6 +263,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json({
         data: {
           ...data,
+          site,
+          siteCode: site,
+          activeSite: site,
+          selectedSite: site,
+          workspaceSite: site,
           dashboard_view: toUpperOrNull(body?.dashboard_view),
           measure_mode: toUpperOrNull(body?.measure_mode),
           inspection_mode: toUpperOrNull(body?.inspection_mode),

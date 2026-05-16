@@ -1,8 +1,9 @@
-import React, { useEffect } from "react"
+import React from "react"
 import ReactDOM from "react-dom/client"
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import "./index.css"
 
+import Login from "./Login"
 import SelectRole from "./SelectRole"
 import Measure from "./pages/Measure"
 import MeasureDisposal from "./pages/MeasureDisposal"
@@ -12,18 +13,68 @@ import EvaluatorDashboard from "./pages/Dashboard"
 import Admin from "./pages/Admin"
 
 type ActiveRole = "FRONT" | "DISPOSAL" | "ROAD" | "PJA" | "EVALUATOR"
-type AccountRole = "USER" | "ADMIN"
-type OperationalAccess = "NONE" | "FIELD" | "PJA"
+type SiteCode = "LAT" | "IPR" | "SDJ" | "ADT"
 
 const LS_KEY = "mt_session_v1"
+const SUPER_ADMIN_USERNAMES = ["MFBAB", "Q4IUM"]
 
 type Session = {
   id?: string | null
   username?: string
-  accountRole?: AccountRole
-  operationalAccess?: OperationalAccess
+  accountRole?: string
+  operationalAccess?: string
   activeRole?: ActiveRole | null
+
+  site?: SiteCode | string | null
+  siteCode?: SiteCode | string | null
+  activeSite?: SiteCode | string | null
+  selectedSite?: SiteCode | string | null
+  workspaceSite?: SiteCode | string | null
+  area?: SiteCode | string | null
+  mineSite?: SiteCode | string | null
+
   ts?: number
+}
+
+function normalizeText(value?: string | null) {
+  return String(value || "").trim().toUpperCase()
+}
+
+function isSuperAdminUsername(username?: string | null) {
+  return SUPER_ADMIN_USERNAMES.includes(normalizeText(username))
+}
+
+function isAdminSession(session?: Session | null) {
+  const username = normalizeText(session?.username)
+  const accountRole = normalizeText(session?.accountRole)
+
+  return (
+    accountRole === "ADMIN" ||
+    accountRole === "SUPER_ADMIN" ||
+    SUPER_ADMIN_USERNAMES.includes(username)
+  )
+}
+
+function isSiteCode(value?: string | null): value is SiteCode {
+  const clean = normalizeText(value)
+  return clean === "LAT" || clean === "IPR" || clean === "SDJ" || clean === "ADT"
+}
+
+function getSessionSite(session: Session | null): SiteCode {
+  const rawSite =
+    session?.activeSite ||
+    session?.selectedSite ||
+    session?.workspaceSite ||
+    session?.site ||
+    session?.siteCode ||
+    session?.area ||
+    session?.mineSite
+
+  const clean = normalizeText(rawSite)
+
+  if (isSiteCode(clean)) return clean
+
+  return "LAT"
 }
 
 function getSession(): Session | null {
@@ -34,39 +85,46 @@ function getSession(): Session | null {
     const parsed = JSON.parse(raw) as Session
     if (!parsed?.username) return null
 
-    return parsed
+    const site = getSessionSite(parsed)
+
+    const normalized: Session = {
+      ...parsed,
+      username: normalizeText(parsed.username),
+      accountRole: isSuperAdminUsername(parsed.username)
+        ? "ADMIN"
+        : normalizeText(parsed.accountRole) || "USER",
+      operationalAccess: isSuperAdminUsername(parsed.username)
+        ? "ALL"
+        : normalizeText(parsed.operationalAccess) || "NONE",
+
+      site,
+      siteCode: site,
+      activeSite: site,
+      selectedSite: site,
+      workspaceSite: site,
+    }
+
+    return normalized
   } catch {
     return null
   }
 }
 
 function saveSession(session: Session) {
-  localStorage.setItem(LS_KEY, JSON.stringify(session))
-}
+  const site = getSessionSite(session)
 
-/**
- * Session demo sementara.
- * Tujuannya agar user langsung bisa masuk SelectRole tanpa login.
- * Dibuat sebagai ADMIN agar bisa akses semua role saat demo.
- */
-function ensureDemoSession() {
-  const existing = getSession()
-
-  if (existing?.username) {
-    return existing
-  }
-
-  const demoSession: Session = {
-    id: "demo-session",
-    username: "DEMO",
-    accountRole: "ADMIN",
-    operationalAccess: "PJA",
-    activeRole: null,
-    ts: Date.now(),
-  }
-
-  saveSession(demoSession)
-  return demoSession
+  localStorage.setItem(
+    LS_KEY,
+    JSON.stringify({
+      ...session,
+      site,
+      siteCode: site,
+      activeSite: site,
+      selectedSite: site,
+      workspaceSite: site,
+      ts: Date.now(),
+    })
+  )
 }
 
 function isValidRole(role: any): role is ActiveRole {
@@ -80,66 +138,48 @@ function isValidRole(role: any): role is ActiveRole {
 }
 
 function canAccessRole(session: Session, role: ActiveRole) {
-  const isAdmin = session.accountRole === "ADMIN"
-  const access = session.operationalAccess ?? "NONE"
+  const isAdmin = isAdminSession(session)
+  const access = normalizeText(session.operationalAccess)
 
   if (isAdmin) return true
 
   if (role === "FRONT" || role === "DISPOSAL" || role === "ROAD") {
-    return access === "FIELD" || access === "PJA"
+    return access === "FIELD" || access === "PJA" || access === "ALL"
   }
 
   if (role === "PJA") {
-    return access === "PJA"
+    return access === "PJA" || access === "ALL"
   }
 
   if (role === "EVALUATOR") {
-    return false
+    return access === "ALL"
   }
 
   return false
 }
 
 function defaultRouteForSession(session: Session) {
-  const isAdmin = session.accountRole === "ADMIN"
+  const activeRole = session.activeRole
 
-  if (isAdmin) {
-    if (isValidRole(session.activeRole)) {
-      if (session.activeRole === "FRONT") return "/measure"
-      if (session.activeRole === "DISPOSAL") return "/measure-disposal"
-      if (session.activeRole === "ROAD") return "/measure-road"
-      if (session.activeRole === "PJA") return "/pja"
-      if (session.activeRole === "EVALUATOR") return "/app"
-    }
-
-    return "/select-role"
-  }
-
-  if (isValidRole(session.activeRole) && canAccessRole(session, session.activeRole)) {
-    if (session.activeRole === "FRONT") return "/measure"
-    if (session.activeRole === "DISPOSAL") return "/measure-disposal"
-    if (session.activeRole === "ROAD") return "/measure-road"
-    if (session.activeRole === "PJA") return "/pja"
+  if (isValidRole(activeRole) && canAccessRole(session, activeRole)) {
+    if (activeRole === "FRONT") return "/measure"
+    if (activeRole === "DISPOSAL") return "/measure-disposal"
+    if (activeRole === "ROAD") return "/measure-road"
+    if (activeRole === "PJA") return "/pja"
+    if (activeRole === "EVALUATOR") return "/app"
   }
 
   return "/select-role"
-}
-
-function DemoSelectRole() {
-  useEffect(() => {
-    ensureDemoSession()
-  }, [])
-
-  return <SelectRole />
 }
 
 function RequireBaseAuth({ children }: { children: React.ReactNode }) {
   const s = getSession()
 
   if (!s) {
-    ensureDemoSession()
-    return <Navigate to="/select-role" replace />
+    return <Navigate to="/login" replace />
   }
+
+  saveSession(s)
 
   return <>{children}</>
 }
@@ -154,9 +194,10 @@ function RequireRoles({
   const s = getSession()
 
   if (!s) {
-    ensureDemoSession()
-    return <Navigate to="/select-role" replace />
+    return <Navigate to="/login" replace />
   }
+
+  saveSession(s)
 
   if (!isValidRole(s.activeRole)) {
     return <Navigate to="/select-role" replace />
@@ -177,11 +218,12 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
   const s = getSession()
 
   if (!s) {
-    ensureDemoSession()
-    return <Navigate to="/select-role" replace />
+    return <Navigate to="/login" replace />
   }
 
-  if (s.accountRole !== "ADMIN") {
+  saveSession(s)
+
+  if (!isAdminSession(s)) {
     return <Navigate to={defaultRouteForSession(s)} replace />
   }
 
@@ -192,14 +234,21 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
-        {/* Link utama langsung masuk ke SelectRole */}
-        <Route path="/" element={<DemoSelectRole />} />
+        {/* Normal flow: buka link utama masuk ke login */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* Untuk demo, login tidak dipakai */}
-        <Route path="/login" element={<Navigate to="/select-role" replace />} />
+        {/* Login aktif lagi */}
+        <Route path="/login" element={<Login />} />
 
-        {/* SelectRole langsung bisa dibuka tanpa login */}
-        <Route path="/select-role" element={<DemoSelectRole />} />
+        {/* Pilih role setelah login */}
+        <Route
+          path="/select-role"
+          element={
+            <RequireBaseAuth>
+              <SelectRole />
+            </RequireBaseAuth>
+          }
+        />
 
         {/* FRONT */}
         <Route
@@ -211,7 +260,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
-        {/* DISPOSAL */}
+        {/* DISPOSAL - tetap disiapkan kalau nanti dipakai lagi */}
         <Route
           path="/measure-disposal"
           element={
@@ -221,7 +270,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
-        {/* ROAD */}
+        {/* ROAD - tetap disiapkan kalau nanti dipakai lagi */}
         <Route
           path="/measure-road"
           element={
@@ -251,21 +300,21 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
-        {/* Home diarahkan sesuai role aktif */}
+        {/* Home diarahkan sesuai activeRole */}
         <Route
           path="/home"
           element={
             <RequireBaseAuth>
               {(() => {
                 const s = getSession()
-                if (!s) return <Navigate to="/select-role" replace />
+                if (!s) return <Navigate to="/login" replace />
                 return <Navigate to={defaultRouteForSession(s)} replace />
               })()}
             </RequireBaseAuth>
           }
         />
 
-        {/* Admin tetap bisa dibuka oleh session demo karena accountRole = ADMIN */}
+        {/* ADMIN */}
         <Route
           path="/admin"
           element={
@@ -275,8 +324,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
 
-        {/* Fallback semua URL asing ke SelectRole */}
-        <Route path="*" element={<Navigate to="/select-role" replace />} />
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
